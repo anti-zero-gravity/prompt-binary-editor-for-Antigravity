@@ -1,0 +1,1798 @@
+<!DOCTYPE html>
+<!--
+  Binary Prompt Editor — フロントエンドUI
+
+  レイアウト:
+    上段左: 操作履歴パネル（スクロール付き、無限件数）
+    上段左2: 辞書パネル（Server Reload + prompt_words 編集）
+    上段右: バイナリHexダンプ + ASCII密度ミニマップ
+    中段:   検索窓（textarea）+ 検索/編集ボタン
+    下段:   プロンプトシート (system_prompts_full.md)
+
+  キーバインド:
+    Delete:  選択範囲を0x20(スペース)で埋める
+    Ctrl+Z:  直前の編集操作を元に戻す
+    Ctrl+Shift+Z / Ctrl+Y: やり直し
+    Ctrl+Enter: 検索実行
+-->
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binary Prompt Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: #333;
+            padding: 8px 16px;
+            border-bottom: 1px solid #555;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            font-size: 14px;
+            color: #4ec9b0;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .panel-top {
+            border-bottom: 2px solid #4ec9b0;
+        }
+
+        /* --- 履歴パネル (上段左) --- */
+        .history-panel {
+            width: 340px;
+            min-width: 200px;
+            background: #1a1a2e;
+            border-right: 2px solid #4ec9b0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .history-panel .panel-header {
+            flex-shrink: 0;
+        }
+
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px;
+            font-size: 12px;
+        }
+
+        .history-entry {
+            padding: 4px 8px;
+            border-bottom: 1px solid #2d2d3e;
+            line-height: 1.5;
+            cursor: pointer;
+        }
+
+        .history-entry:hover {
+            background: #2a2d3e;
+        }
+
+        .history-entry .h-line {
+            color: #569cd6;
+            font-weight: bold;
+        }
+
+        .history-entry .h-action {
+            color: #4ec9b0;
+        }
+
+        .history-entry .h-action.del {
+            color: #f14c4c;
+        }
+
+        .history-entry .h-addr {
+            color: #ce9178;
+        }
+
+        .history-entry .h-time {
+            color: #808080;
+            font-size: 11px;
+        }
+
+        /* 取り消し線 (Undo済みエントリ) */
+        .history-entry.undone {
+            text-decoration: line-through;
+            opacity: 0.45;
+        }
+
+        .history-entry .h-saved {
+            float: right;
+            color: #4ec9b0;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+
+        .history-entry .h-unsaved {
+            float: right;
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        /* --- 辞書パネル (上段左2) --- */
+        .dict-panel {
+            width: 115px;
+            min-width: 100px;
+            background: #1a1a2e;
+            border-right: 2px solid #4ec9b0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .dict-panel .panel-header {
+            flex-shrink: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .reload-btn {
+            background: #4ec9b0;
+            color: #000;
+            border: none;
+            padding: 3px 8px;
+            font-size: 10px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-family: inherit;
+            transition: background 0.2s, color 0.2s;
+            font-weight: bold;
+        }
+
+        .reload-btn:hover {
+            background: #3eb099;
+        }
+
+        .reload-btn.dirty {
+            background: #e74c3c;
+            color: #fff;
+            animation: blink-text 1s ease-in-out infinite;
+        }
+
+        @keyframes blink-text {
+            0%, 100% { color: #fff; }
+            50% { color: rgba(255, 255, 255, 0.2); }
+        }
+
+        .reload-btn.dirty:hover {
+            background: #c0392b;
+            animation: none;
+            color: #fff;
+        }
+
+        @keyframes blink-save {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .dict-content {
+            flex: 1;
+            padding: 4px 6px;
+            font-size: 12px;
+            line-height: 1.6;
+            overflow: hidden;
+        }
+
+        .dict-word {
+            white-space: pre;
+            color: #d4d4d4;
+            cursor: text;
+        }
+
+        .dict-word .space-marker {
+            color: #808080;
+            background: #2a2a3e;
+            border-radius: 1px;
+        }
+
+        .dict-editor-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #1e1e1e;
+        }
+
+        .dict-overlay,
+        .dict-source {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 4px 6px;
+            border: none;
+            box-sizing: border-box;
+            font-family: Consolas, 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre;
+            overflow-wrap: break-word;
+            overflow: hidden;
+        }
+
+        .dict-source {
+            color: transparent !important;
+            background: transparent !important;
+            caret-color: #00bfff;
+            resize: none;
+            overflow: auto;
+            z-index: 2;
+        }
+
+        .dict-overlay {
+            pointer-events: none;
+            z-index: 1;
+            color: #d4d4d4;
+        }
+
+        .space-mark {
+            background-color: #665c00;
+        }
+
+        color: #00bfff;
+        }
+
+        .dict-textarea {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            color: #d4d4d4;
+            border: none;
+            outline: none;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            resize: none;
+            overflow: hidden;
+            padding: 0;
+        }
+
+        /* --- Hexダンプエリア (上段右) --- */
+        .hex-area {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .panel-middle {
+            background: #252526;
+            padding: 8px 16px;
+            border-bottom: 2px solid #4ec9b0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 0 0 auto;
+            /* 固定高にする */
+        }
+
+        .search-box {
+            flex: 1;
+            background: #3c3c3c;
+            border: 1px solid #555;
+            color: #d4d4d4;
+            padding: 8px 12px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            resize: vertical;
+            min-height: 40px;
+            max-height: 120px;
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .search-box:focus {
+            border-color: #4ec9b0;
+        }
+
+        .search-btn {
+            background: #4ec9b0;
+            color: #1e1e1e;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .search-btn:hover {
+            background: #3eb099;
+        }
+
+        .header-right-group {
+            display: flex;
+            align-items: center;
+        }
+
+        .header-btn {
+            background: #3c3c3c;
+            color: #d4d4d4;
+            border: 1px solid #555;
+            padding: 2px 8px;
+            font-size: 11px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: background 0.2s;
+            white-space: nowrap;
+            /* Prevent button text from wrapping */
+        }
+
+        .header-btn:hover {
+            background: #555;
+        }
+
+        .clickable-filename {
+            background-color: #4ec9b0;
+            /* Green background */
+            color: white;
+            /* White text */
+            padding: 2px 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+
+        .clickable-filename:hover {
+            background-color: #3eb099;
+            /* Slightly darker green on hover */
+        }
+
+        #edit-button {
+            background: #f39c12;
+        }
+
+        #edit-button:hover {
+            background: #d68910;
+        }
+
+        .search-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .panel-content {
+            flex: 1;
+            overflow: auto;
+            padding: 8px;
+        }
+
+        .panel-header {
+            background: #252526;
+            padding: 4px 8px;
+            margin-bottom: 8px;
+            border-left: 3px solid #4ec9b0;
+            font-size: 12px;
+            color: #808080;
+        }
+
+        /* ミニマップ */
+        .minimap-wrapper {
+            width: 80px;
+            position: relative;
+            background: #252526;
+            border: 1px solid #3c3c3c;
+            border-left: 3px solid #252526;
+            /* 常に3px確保してレイアウトシフトを防ぐ */
+        }
+
+        .minimap-wrapper.focused {
+            border-left: 3px solid #4ec9b0;
+        }
+
+        .minimap-container {
+            width: 100%;
+            height: 100%;
+            overflow-y: scroll;
+            overflow-x: hidden;
+            outline: none;
+        }
+
+        .minimap-container canvas {
+            display: block;
+            width: 100%;
+        }
+
+        .minimap-padding {
+            width: 100%;
+            background: #252526;
+        }
+
+        /* カーソルライン: 中央配置、短め、暗めの黄色 */
+        .minimap-cursor {
+            position: absolute;
+            left: 25%;
+            right: calc(25% + 17px);
+            height: 2px;
+            background: rgba(180, 150, 50, 0.95);
+            top: calc(50% - 2px);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* 3-Column Layout */
+        #dump-binary {
+            display: flex;
+            flex-direction: row;
+            min-height: 100%;
+        }
+        .col-addr, .col-hex, .col-ascii {
+            display: flex;
+            flex-direction: column;
+        }
+        .col-addr { width: 90px; min-width: 90px; flex-shrink: 0; border-right: 1px solid #333; }
+        .col-hex { width: 440px; min-width: 440px; flex-shrink: 0; padding-left: 10px; }
+        .col-ascii { flex-grow: 1; min-width: 100px; border-left: 1px solid #333; padding-left: 10px; }
+        .dump-cell { height: 20px; min-height: 20px; line-height: 20px; font-size: 13px; white-space: pre; }
+        .col-addr .dump-cell { color: #569cd6; }
+        .col-hex .dump-cell { color: #ce9178; letter-spacing: 1px; }
+        .col-ascii .dump-cell { color: #6a9955; }
+
+
+        .sheet-line {
+            display: flex;
+            font-size: 13px;
+            line-height: 1.8;
+            padding: 2px 0;
+            border-bottom: 1px solid #2d2d2d;
+        }
+
+        .sheet-line:hover {
+            background: #2a2d2e;
+        }
+
+        .sheet-line.active {
+            background: #444422;
+            border-left: 3px solid #b4a032;
+        }
+
+        .line-num {
+            color: #858585;
+            min-width: 50px;
+            text-align: right;
+            padding-right: 12px;
+            user-select: none;
+        }
+
+        .line-text {
+            color: #d4d4d4;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .loading {
+            color: #808080;
+            font-style: italic;
+        }
+
+        footer {
+            background: #333;
+            padding: 4px 16px;
+            font-size: 12px;
+            color: #d4d4d4;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .footer-btn {
+            background: #4ec9b0;
+            color: #1e1e1e;
+            border: none;
+            padding: 2px 8px;
+            font-size: 11px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin-left: 6px;
+            font-family: inherit;
+        }
+
+        .footer-btn:hover {
+            background: #3eb099;
+        }
+
+        #search-feedback {
+            position: fixed;
+            bottom: 40px;
+            /* footerより少し上に上げる */
+            right: 20px;
+            background: #2d2d2d;
+            color: #eeeeee;
+            padding: 12px 20px;
+            font-size: 14px;
+            z-index: 9999;
+            /* 最前面 */
+            border-radius: 4px;
+            border-left: 5px solid #4ec9b0;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+            pointer-events: none;
+            max-width: 350px;
+            display: none;
+            transition: all 0.2s ease;
+        }
+
+        #search-feedback.error {
+            border-left-color: #f14c4c !important;
+            background: #3a1e1e !important;
+        }
+
+        #search-feedback.warning {
+            border-left-color: #f39c12 !important;
+            background: #3a2e1e !important;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Binary Prompt Editor</h1>
+        <div class="header-right-group">
+            <span id="offset-display" style="color: #808080; font-size: 12px;">Offset: 0x00000000</span>
+            <span id="binary-info"
+                style="color: #808080; font-size: 12px; margin-left: 16px; display: flex; align-items: center;">
+                <span id="binary-filename" class="clickable-filename" onclick="selectBinaryFile()">Binary:
+                    (loading...)</span>
+                <button id="save-binary-btn" class="header-btn" style="margin-left: 8px; background: #ccc; border-color: #ccc; color: #888; cursor: not-allowed;" disabled onclick="saveBinary()">Save</button>
+            </span>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- 上段: 左=履歴、右=Hexダンプ+ミニマップ -->
+        <div class="panel panel-top">
+            <div class="history-panel">
+                <div class="panel-header">Operation History <span id="history-count" style="color:#808080;">(0)</span></div>
+                <div class="history-list" id="history-list"></div>
+            </div>
+            <div class="dict-panel">
+                <div class="panel-header"><button class="reload-btn" onclick="reloadServer()">Server Reload</button>
+                </div>
+                <div class="dict-content">
+                    <div class="dict-editor-wrapper">
+                        <div class="dict-overlay" id="dict-overlay" aria-hidden="true"></div>
+                        <textarea class="dict-source" id="dict-textarea" spellcheck="false"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="hex-area">
+                <div class="panel-content" id="panel-top">
+
+                    <div id="dump-binary" class="loading">Loading binary...</div>
+                </div>
+                <div class="minimap-wrapper">
+                    <div class="minimap-cursor"></div>
+                    <div class="minimap-container" id="minimap-container" tabindex="0">
+                        <div id="padding-top" class="minimap-padding"></div>
+                        <canvas id="minimap-canvas"></canvas>
+                        <div id="padding-bottom" class="minimap-padding"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-middle">
+            <textarea id="search-input" class="search-box" placeholder="検索ワードを入力 (1024文字以上対応)..."
+                maxlength="5000"></textarea>
+            <button type="button" id="search-button" class="search-btn" title="検索" onclick="executeSearch()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+            </button>
+            <button id="edit-button" class="search-btn" title="編集">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div class="panel">
+            <div class="panel-content" id="panel-bottom">
+                <div class="panel-header" id="sheet-header-title">Sheet: system_prompts_full.md</div>
+                <div id="sheet-content" class="loading">Loading sheet...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="search-feedback">検索結果がここに表示されます</div>
+    <footer id="footer-status">
+        <span id="status-text">Initializing...</span>
+        <div id="footer-actions">
+            <!-- Hidden Load Input -->
+            <input type="file" id="sheet-file-input" accept=".md,.txt,.csv" style="display: none;">
+            <button class="footer-btn" id="btn-sheet-load" title="テキストファイルを読み込み">Load</button>
+            <button class="footer-btn" id="btn-sheet-paste" title="クリップボードから貼り付け">Clip</button>
+        </div>
+    </footer>
+
+    <script>
+        // -------------------------------------------------------------------
+        // グローバル変数
+        // -------------------------------------------------------------------
+        let CHUNK_SIZE = 8192; // 8KB
+        const PART_SIZE = 512;
+        let totalBinarySize = 0;
+        let currentBlockIndex = 0;
+        let densityData = [];
+        let isPartialLoaded = false;
+        let lastTargetAddress = null;
+        let loadedStartOffset = 0;
+        let loadedEndOffset = 0;
+        let isLoading = false;
+        let maxW = 1.0;
+        let currentHighlight = null;      // {startAddr, length, color}
+        let currentDictionaryMatches = [];
+        const DEFAULT_HIGHLIGHT_COLOR = 'rgba(100, 80, 10, 0.6)';
+        const HIGHLIGHT_COLOR_DARK = 'rgba(100, 80, 10, 0.6)';
+
+        // --- 編集機能用 ---
+        let undoStack = [];               // [{offset, original, description}] (無制限)
+        let redoStack = [];               // [{offset, newBytes, description}] (undo取り消し待ち)
+        let savedStackLength = 0;
+
+        function updateSaveBtn() {
+            const btn = document.getElementById('save-binary-btn');
+            const fnSpan = document.getElementById('binary-filename');
+            if (!btn) return;
+            const isDirty = (undoStack.length !== savedStackLength);
+            btn.disabled = !isDirty;
+            if (isDirty) {
+                btn.style.backgroundColor = '#4ec9b0';
+                btn.style.borderColor = '#4ec9b0';
+                btn.style.color = '#fff';
+                btn.style.cursor = 'pointer';
+                btn.style.animation = 'blink-save 1s ease-in-out infinite';
+                if (fnSpan) fnSpan.style.opacity = '0.3';
+            } else {
+                btn.style.backgroundColor = '#ccc';
+                btn.style.borderColor = '#ccc';
+                btn.style.color = '#888';
+                btn.style.cursor = 'not-allowed';
+                btn.style.animation = 'none';
+                if (fnSpan) fnSpan.style.opacity = '1';
+            }
+        }
+        let activeSheetLine = -1;         // 現在アクティブなシート行番号 (1-indexed)
+
+        // Request control
+        let lastRequestTime = 0;
+        let debounceTimer = null;
+        let pendingRequest = null;
+        let currentAbortController = null;
+
+        function throttledLoadBinaryDump(offset, size) {
+            const now = Date.now();
+            const elapsed = now - lastRequestTime;
+            pendingRequest = { offset, size };
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+                debounceTimer = null;
+            }
+            if (elapsed >= 100) {
+                lastRequestTime = now;
+                loadBinaryDump(offset, size);
+            } else {
+                debounceTimer = setTimeout(() => {
+                    const req = pendingRequest;
+                    if (req) {
+                        lastRequestTime = Date.now();
+                        loadBinaryDump(req.offset, req.size);
+                        pendingRequest = null;
+                    }
+                    debounceTimer = null;
+                }, 200);
+            }
+        }
+
+        function densityToColor(density) {
+            const w = density.w || 0;
+            let red = 20, green = 20, blue = 20;
+            if (w > 0 && maxW > 0) {
+                // ユーザー要望: w=1なら55、最大255 (範囲: 55-255)
+                const minGreen = 55;
+                const range = 255 - minGreen;
+                const norm = Math.min(1.0, w / maxW);
+                green = minGreen + (norm * range);
+            }
+            return [Math.floor(Math.min(255, red)), Math.floor(Math.min(255, green)), Math.floor(Math.min(255, blue))];
+        }
+
+        function drawMinimap() {
+            const canvas = document.getElementById('minimap-canvas');
+            const container = document.getElementById('minimap-container');
+            const ctx = canvas.getContext('2d');
+            const width = container.clientWidth - 17;
+            const height = densityData.length;
+            canvas.width = width;
+            canvas.height = height;
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+            for (let y = 0; y < densityData.length; y++) {
+                const [r, g, b] = densityToColor(densityData[y]);
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
+                }
+            }
+            ctx.putImageData(imageData, 0, 0);
+            const paddingHeight = getCursorOffset();
+            document.getElementById('padding-top').style.height = paddingHeight + 'px';
+            document.getElementById('padding-bottom').style.height = paddingHeight + 'px';
+        }
+
+        function getCursorOffset() {
+            const container = document.getElementById('minimap-container');
+            return Math.floor(container.clientHeight / 2);
+        }
+
+        function getBlockAtCursor() {
+            const container = document.getElementById('minimap-container');
+            const scrollTop = container.scrollTop;
+            const maxScrollTop = container.scrollHeight - container.clientHeight;
+            if (maxScrollTop <= 0 || densityData.length === 0) return 0;
+            return Math.floor((scrollTop / maxScrollTop) * (densityData.length - 1));
+        }
+
+        function scrollToBlock(blockIndex) {
+            blockIndex = Math.max(0, Math.min(densityData.length - 1, blockIndex));
+            const container = document.getElementById('minimap-container');
+            const maxScrollTop = container.scrollHeight - container.clientHeight;
+            if (densityData.length <= 1) { container.scrollTop = 0; return; }
+            container.scrollTop = (blockIndex / (densityData.length - 1)) * maxScrollTop;
+        }
+
+        function onMinimapScroll() {
+            const container = document.getElementById('minimap-container');
+            if (densityData.length === 0) return;
+            const blockIndex = getBlockAtCursor();
+            const clampedIndex = Math.max(0, Math.min(densityData.length - 1, blockIndex));
+            if (clampedIndex !== currentBlockIndex && !isLoading) {
+                currentBlockIndex = clampedIndex;
+                lastTargetAddress = null;
+                throttledLoadBinaryDump(currentBlockIndex * CHUNK_SIZE, PART_SIZE);
+            }
+        }
+
+        function onDumpScroll() {
+            const container = document.getElementById('panel-top');
+            const scrollTop = container.scrollTop;
+            const scrollHeight = container.scrollHeight;
+            const clientHeight = container.clientHeight;
+            if (scrollHeight - (scrollTop + clientHeight) < 100) {
+                if (!isLoading && loadedEndOffset < totalBinarySize) {
+                    loadBinaryDump(loadedEndOffset, PART_SIZE, true);
+                }
+            }
+        }
+
+        async function loadCurrentBlockFull() {
+            if (isPartialLoaded && !isLoading && (loadedEndOffset - loadedStartOffset) < CHUNK_SIZE) {
+                loadBinaryDump(loadedEndOffset, CHUNK_SIZE - (loadedEndOffset - loadedStartOffset), true);
+            }
+        }
+
+        function showSearchFeedback(message, type = 'info') {
+            const feedback = document.getElementById('search-feedback');
+            if (!feedback) {
+                alert(message);
+                return;
+            }
+            feedback.textContent = message;
+            feedback.style.display = 'block';
+            feedback.style.opacity = '1';
+            feedback.classList.remove('error', 'warning');
+            if (type !== 'info') feedback.classList.add(type);
+            if (window.feedbackTimer) clearTimeout(window.feedbackTimer);
+            window.feedbackTimer = setTimeout(() => {
+                feedback.style.display = 'none';
+            }, 8000);
+        }
+
+
+        // 検索キャッシュ
+        let lastSearchQuery = "";
+        let currentMatchIndex = 0;
+        let cachedMatches = [];
+
+        async function executeSearch() {
+            const searchInput = document.getElementById('search-input');
+            if (!searchInput) return;
+            const searchText = searchInput.value.trim();
+            if (!searchText) {
+                showSearchFeedback("検索ワードを入力してください。", "warning");
+                return;
+            }
+
+            // 前回と同じ検索ワードなら「次へ」移動
+            if (searchText === lastSearchQuery && cachedMatches.length > 0) {
+                currentMatchIndex = (currentMatchIndex + 1) % cachedMatches.length;
+                const match = cachedMatches[currentMatchIndex];
+                highlightRange(match.offset, match.length, HIGHLIGHT_COLOR_DARK);
+                showSearchFeedback(`${currentMatchIndex + 1}/${cachedMatches.length} 件目: 0x${match.offset.toString(16).toUpperCase()} に移動`);
+                return;
+            }
+
+            try {
+                // 新規検索
+                showSearchFeedback('Searching...', 'info');
+                const res = await fetch(`/api/search?q=${encodeURIComponent(searchText)}`);
+                const matches = await res.json();
+
+                if (matches && matches.length > 0) {
+                    cachedMatches = matches;
+                    lastSearchQuery = searchText;
+                    currentMatchIndex = 0;
+
+                    const match = matches[0];
+                    highlightRange(match.offset, match.length, HIGHLIGHT_COLOR_DARK);
+
+                    if (matches.length === 1) {
+                        showSearchFeedback(`1件ヒット: 0x${match.offset.toString(16).toUpperCase()}`);
+                    } else {
+                        showSearchFeedback(`${matches.length}件ヒット。1件目を表示中 (ボタン再押下で次へ)`, 'info');
+                    }
+                } else {
+                    cachedMatches = [];
+                    lastSearchQuery = searchText;
+
+                    try {
+                        const mapRes = await fetch(`/api/map-line?text=${encodeURIComponent(searchText)}`);
+                        const mapData = await mapRes.json();
+                        if (mapData.start_offset >= 0 && mapData.total_length > 0) {
+                            highlightRange(mapData.start_offset, mapData.total_length, HIGHLIGHT_COLOR_DARK);
+                            const addr = mapData.start_offset_hex;
+                            if (mapData.binary_text) {
+                                document.getElementById('search-input').value = mapData.binary_text;
+                                updateEditButtonState();
+                            }
+                            showSearchFeedback(`${addr} に移動 (${mapData.total_length} bytes)`);
+                        } else {
+                            showSearchFeedback("バイナリ内に見つかりませんでした。", 'error');
+                        }
+                    } catch (mapErr) {
+                        console.error("Map-line fallback failed:", mapErr);
+                        showSearchFeedback("見つかりませんでした。", 'error');
+                    }
+                }
+            } catch (err) {
+                console.error("Search failed:", err);
+                showSearchFeedback("検索エラー", 'error');
+            }
+        }
+        window.executeSearch = executeSearch;
+
+        function updateEditButtonState() {
+            const editBtn = document.getElementById('edit-button');
+            const searchInput = document.getElementById('search-input');
+            if (!editBtn || !searchInput) return;
+            const inputLen = searchInput.value.length;
+            const highlightLen = currentHighlight ? currentHighlight.length : 0;
+            if (highlightLen > 0 && inputLen === highlightLen) {
+                editBtn.style.background = '#f39c12';
+                editBtn.style.opacity = '1';
+                editBtn.style.cursor = 'pointer';
+                editBtn.title = `編集可能 (サイズ: ${highlightLen})`;
+            } else {
+                editBtn.style.background = '#444';
+                editBtn.style.opacity = '0.5';
+                editBtn.style.cursor = 'not-allowed';
+                editBtn.title = `サイズ不一致 (入力: ${inputLen} / 選択: ${highlightLen})`;
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // バイナリ書き込みヘルパー
+        //   writeBinary() で /api/write 呼び出し、undo 用に元データ保存
+        //   成功時: redoスタッククリア + 再描画
+        // -------------------------------------------------------------------
+
+        /**
+         * バイナリの指定オフセットにバイトを書き込む。
+         * @param {number} offset - 書き込み開始オフセット
+         * @param {number[]} bytes - 書き込むバイト配列 (0-255)
+         * @param {string} description - 履歴表示用の説明
+         * @returns {Promise<boolean>} 成功したか
+         * 新操作のためredoスタックを破棄し、取り消し線付き履歴も削除する。
+         */
+        async function writeBinary(offset, bytes, description = '') {
+            try {
+                const res = await fetch('/api/write', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ offset, bytes }),
+                });
+                const data = await res.json();
+                if (!data.ok) {
+                    showSearchFeedback(`書き込みエラー: ${data.error}`, 'error');
+                    return false;
+                }
+                // undo スタックに元データを保存
+                undoStack.push({ offset, original: data.original, description });
+                // 新操作 → redoスタック破棄 + 取り消し線履歴削除
+                redoStack = [];
+                clearUndoneHistoryEntries();
+                // 表示を更新
+                await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
+                if (currentHighlight) updateVisibleHighlights();
+                updateSaveBtn();
+                return true;
+            } catch (err) {
+                console.error('Write failed:', err);
+                showSearchFeedback('書き込みエラー', 'error');
+                return false;
+            }
+        }
+
+        /**
+         * 選択範囲を 0x20 (スペース) で埋める (DELキー)
+         */
+        async function deleteSelection() {
+            if (!currentHighlight || currentHighlight.length <= 0) {
+                showSearchFeedback('範囲が選択されていません', 'warning');
+                return;
+            }
+            const { startAddr, length } = currentHighlight;
+            const spaceBytes = new Array(length).fill(0x20);
+            const lineInfo = activeSheetLine > 0 ? `L${activeSheetLine}` : '';
+            const desc = `DEL ${lineInfo} 0x${startAddr.toString(16).toUpperCase()} (${length}B)`;
+            const ok = await writeBinary(startAddr, spaceBytes, desc);
+            if (ok) {
+                addHistoryEntry('DEL', startAddr, length, activeSheetLine);
+                showSearchFeedback(`${length} bytes を 0x20 で埋めました`);
+            }
+        }
+
+        /**
+         * 検索窓のテキストをASCIIとして選択範囲に書き込む (編集ボタン)
+         */
+        async function writeFromSearchBox() {
+            if (!currentHighlight || currentHighlight.length <= 0) {
+                showSearchFeedback('範囲が選択されていません', 'warning');
+                return;
+            }
+            const searchInput = document.getElementById('search-input');
+            const text = searchInput.value;
+            const textBytes = Array.from(new TextEncoder().encode(text));
+            if (textBytes.length !== currentHighlight.length) {
+                showSearchFeedback(`サイズ不一致 (入力: ${textBytes.length} / 選択: ${currentHighlight.length})`, 'warning');
+                return;
+            }
+            const { startAddr, length } = currentHighlight;
+            const lineInfo = activeSheetLine > 0 ? `L${activeSheetLine}` : '';
+            const desc = `WRITE ${lineInfo} 0x${startAddr.toString(16).toUpperCase()} (${length}B)`;
+            const ok = await writeBinary(startAddr, textBytes, desc);
+            if (ok) {
+                addHistoryEntry('WRITE', startAddr, length, activeSheetLine);
+                showSearchFeedback(`${length} bytes を書き込みました`);
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // Undo / Redo
+        //   Undo:  最新履歴に取り消し線を付け、バイナリを復元
+        //   Redo:  取り消し線を解除し、バイナリを再適用
+        //   新操作時: 取り消し線履歴を全削除 + redoスタック破棄
+        // -------------------------------------------------------------------
+
+
+        /**
+         * 直前の操作を元に戻す (Ctrl+Z)
+         * 履歴の最後の非取消エントリに取り消し線を付ける
+         */
+        async function undoLast() {
+            if (undoStack.length === 0) {
+                showSearchFeedback('Undo する操作がありません', 'warning');
+                return;
+            }
+            const last = undoStack.pop();
+            try {
+                const res = await fetch('/api/write', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ offset: last.offset, bytes: last.original }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    // redo用に保存 (上書き前のデータ = 操作後のデータ)
+                    redoStack.push({ offset: last.offset, newBytes: data.original, original: last.original, description: last.description });
+                    await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
+                    if (currentHighlight) updateVisibleHighlights();
+                    // 履歴の最後の非取消エントリに取り消し線を付ける
+                    strikethroughLastEntry();
+                    showSearchFeedback(`Undo: ${last.description}`);
+                    updateSaveBtn();
+                }
+            } catch (err) {
+                console.error('Undo failed:', err);
+                showSearchFeedback('Undo エラー', 'error');
+            }
+        }
+
+        /**
+         * 取り消しを戻す (Ctrl+Shift+Z / Ctrl+Y)
+         * 最後の取り消し線エントリの線を解除し、バイナリを再適用
+         */
+        async function redoLast() {
+            if (redoStack.length === 0) {
+                showSearchFeedback('Redo する操作がありません', 'warning');
+                return;
+            }
+            const last = redoStack.pop();
+            try {
+                const res = await fetch('/api/write', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ offset: last.offset, bytes: last.newBytes }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    // undoスタックに戻す
+                    undoStack.push({ offset: last.offset, original: data.original, description: last.description });
+                    await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
+                    if (currentHighlight) updateVisibleHighlights();
+                    // 履歴の最後の取り消し線を解除
+                    unstrikethroughLastEntry();
+                    showSearchFeedback(`Redo: ${last.description}`);
+                    updateSaveBtn();
+                }
+            } catch (err) {
+                console.error('Redo failed:', err);
+                showSearchFeedback('Redo エラー', 'error');
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // 操作履歴パネル
+        //   新エントリは下に追加 (下→上に流れる)
+        //   Undo: 最後の非取消エントリに .undone
+        //   Redo: 最後の .undone を解除
+        //   新操作: .undone エントリを全削除
+        // -------------------------------------------------------------------
+
+        /**
+         * 履歴パネルにエントリを下に追加し自動スクロール
+         * @param {string} action - 'DEL' | 'WRITE' | 'UNDO'
+         * @param {number} offset
+         * @param {number} length
+         * @param {number} lineNum - シート行番号 (-1 = なし)
+         */
+        function addHistoryEntry(action, offset, length, lineNum) {
+            const list = document.getElementById('history-list');
+            const countSpan = document.getElementById('history-count');
+            const entry = document.createElement('div');
+            entry.className = 'history-entry';
+            const now = new Date();
+            const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+            const lineStr = lineNum > 0 ? `<span class="h-line">L${lineNum}</span> ` : '';
+            const actionClass = action === 'DEL' ? 'del' : '';
+            const addr = `0x${offset.toString(16).toUpperCase().padStart(8, '0')}`;
+            const unsavedLabel = (undoStack.length !== savedStackLength) ? '<span class="h-unsaved">unsaved</span>' : '';
+            entry.innerHTML = `${lineStr}<span class="h-action ${actionClass}">${action}</span> <span class="h-addr">${addr}</span> (${length}B) <span class="h-time">${time}</span>${unsavedLabel}`;
+            entry.addEventListener('click', () => goToAddress(offset));
+            list.appendChild(entry);  // 下に追加
+            list.scrollTop = list.scrollHeight;  // 自動スクロール
+            countSpan.textContent = `(${list.children.length})`;
+        }
+
+        /** 履歴の最後の非取消エントリに取り消し線を付ける */
+        function strikethroughLastEntry() {
+            const list = document.getElementById('history-list');
+            const entries = list.querySelectorAll('.history-entry:not(.undone)');
+            if (entries.length > 0) {
+                const entry = entries[entries.length - 1];
+                entry.classList.add('undone');
+                // unsaved ラベルを追加（dirty状態の場合）
+                if (undoStack.length !== savedStackLength || redoStack.length > 0) {
+                    // 既存のsaved/unsavedラベルを削除
+                    const existing = entry.querySelector('.h-saved, .h-unsaved');
+                    if (existing) existing.remove();
+                    const label = document.createElement('span');
+                    label.className = 'h-unsaved';
+                    label.textContent = 'unsaved';
+                    entry.appendChild(label);
+                }
+            }
+            updateHistoryCount();
+        }
+
+        /** 履歴の最後の取り消し線エントリの線を解除 */
+        function unstrikethroughLastEntry() {
+            const list = document.getElementById('history-list');
+            const undone = list.querySelectorAll('.history-entry.undone');
+            if (undone.length > 0) {
+                const entry = undone[undone.length - 1];
+                entry.classList.remove('undone');
+                // unsavedラベルを削除
+                const label = entry.querySelector('.h-unsaved');
+                if (label) label.remove();
+            }
+            updateHistoryCount();
+        }
+
+        /** 取り消し線付きエントリを全削除 (新操作時に呼ぶ) */
+        function clearUndoneHistoryEntries() {
+            const list = document.getElementById('history-list');
+            const undone = list.querySelectorAll('.history-entry.undone');
+            undone.forEach(el => el.remove());
+            updateHistoryCount();
+        }
+
+        /** 履歴件数表示を更新 */
+        function updateHistoryCount() {
+            const list = document.getElementById('history-list');
+            const countSpan = document.getElementById('history-count');
+            const active = list.querySelectorAll('.history-entry:not(.undone)').length;
+            const total = list.children.length;
+            countSpan.textContent = active < total ? `(${active}/${total})` : `(${total})`;
+        }
+
+        /** 保存時: 全save/unsavedラベルをクリアし、最後の非取消エントリにsavedマーク */
+        function markHistorySaved() {
+            const list = document.getElementById('history-list');
+            // 既存のsaved/unsavedラベルを全削除
+            list.querySelectorAll('.h-saved, .h-unsaved').forEach(el => el.remove());
+            // 最後の非取消エントリにsavedマーク
+            const entries = list.querySelectorAll('.history-entry:not(.undone)');
+            if (entries.length > 0) {
+                const label = document.createElement('span');
+                label.className = 'h-saved';
+                label.textContent = 'saved';
+                entries[entries.length - 1].appendChild(label);
+            }
+        }
+        // -------------------------------------------------------------------
+        // コントロール初期化
+        //   ミニマップ、ダンプスクロール、検索窓、DEL/Ctrl+Z/編集ボタン
+        // -------------------------------------------------------------------
+
+        function setupControls() {
+            const container = document.getElementById('minimap-container');
+            const wrapper = document.querySelector('.minimap-wrapper');
+            const dumpContainer = document.getElementById('panel-top');
+            const searchInput = document.getElementById('search-input');
+
+            // ミニマップ操作
+            if (container) {
+                container.addEventListener('scroll', onMinimapScroll);
+                container.addEventListener('keydown', (e) => {
+                    switch (e.key) {
+                        case 'ArrowUp': e.preventDefault(); container.scrollTop -= 1; break;
+                        case 'ArrowDown': e.preventDefault(); container.scrollTop += 1; break;
+                        case 'PageUp': e.preventDefault(); container.scrollTop -= 4; break;
+                        case 'PageDown': e.preventDefault(); container.scrollTop += 4; break;
+                        case 'Home': e.preventDefault(); scrollToBlock(0); break;
+                        case 'End': e.preventDefault(); scrollToBlock(densityData.length - 1); break;
+                    }
+                });
+                container.addEventListener('focus', () => wrapper.classList.add('focused'));
+                container.addEventListener('blur', () => wrapper.classList.remove('focused'));
+            }
+            // ダンプスクロール（遅延読み込み）
+            if (dumpContainer) {
+                dumpContainer.addEventListener('scroll', onDumpScroll);
+                dumpContainer.addEventListener('mouseenter', loadCurrentBlockFull);
+            }
+            // 検索窓: Ctrl+Enter で検索
+            if (searchInput) {
+                searchInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        executeSearch();
+                    }
+                });
+                searchInput.addEventListener('input', updateEditButtonState);
+            }
+            // 編集ボタン: クリックで検索窓テキストを書き込み
+            const editBtn = document.getElementById('edit-button');
+            if (editBtn) {
+                editBtn.addEventListener('click', writeFromSearchBox);
+            }
+            // グローバルキーバインド: Delete=0x20埋め, Ctrl+Z=undo, Ctrl+Shift+Z/Ctrl+Y=redo
+            document.addEventListener('keydown', (e) => {
+                const inSearch = document.activeElement?.id === 'search-input';
+                // Delete キー (検索窓にフォーカスがある場合は通常動作)
+                if (e.key === 'Delete' && !inSearch) {
+                    e.preventDefault();
+                    deleteSelection();
+                }
+                // Ctrl+Shift+Z or Ctrl+Y → Redo
+                if (!inSearch && ((e.key.toLowerCase() === 'z' && e.ctrlKey && e.shiftKey) || (e.key.toLowerCase() === 'y' && e.ctrlKey))) {
+                    e.preventDefault();
+                    redoLast();
+                    return;
+                }
+                // Ctrl+Z → Undo
+                if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !inSearch) {
+                    e.preventDefault();
+                    undoLast();
+                }
+            });
+            window.addEventListener('resize', () => drawMinimap());
+            updateEditButtonState();
+        }
+
+        async function loadDensity() {
+            try {
+                const res = await fetch('/api/density');
+                const data = await res.json();
+                densityData = data.density;
+                if (data.block_size) CHUNK_SIZE = data.block_size;
+                if (data.max_density) maxW = data.max_density;
+                drawMinimap();
+            } catch (err) { console.error('Failed to load density:', err); }
+        }
+
+        function highlightRange(startAddr, length, color = DEFAULT_HIGHLIGHT_COLOR) {
+            currentHighlight = { startAddr, length, color };
+            updateVisibleHighlights();
+            updateEditButtonState();
+            goToAddress(startAddr);
+        }
+
+        function updateVisibleHighlights() {
+            const dumpContainer = document.getElementById('dump-binary');
+            if (!dumpContainer) return;
+
+            const colAddr = dumpContainer.querySelector('.col-addr');
+            const colHex = dumpContainer.querySelector('.col-hex');
+            const colAscii = dumpContainer.querySelector('.col-ascii');
+
+            if (!colAddr || !colHex || !colAscii) return;
+
+            const addrCells = colAddr.querySelectorAll('.dump-cell');
+            const hexCells = colHex.querySelectorAll('.dump-cell');
+            const asciiCells = colAscii.querySelectorAll('.dump-cell');
+
+            addrCells.forEach((addrCell, idx) => {
+                const lineAddr = parseInt(addrCell.textContent, 16);
+                
+                if (hexCells[idx]) {
+                    const hexSpans = hexCells[idx].querySelectorAll('span');
+                    hexSpans.forEach((sp, i) => {
+                        const currentAddr = lineAddr + i;
+                        sp.style.background = isHighlighted(currentAddr) || (isDictionaryMatch(currentAddr) ? 'rgba(165, 255, 0, 0.07)' : '');
+                    });
+                }
+                
+                if (asciiCells[idx]) {
+                    const asciiSpans = asciiCells[idx].querySelectorAll('span');
+                    asciiSpans.forEach((sp, i) => {
+                        const currentAddr = lineAddr + i;
+                        sp.style.background = isHighlighted(currentAddr) || (isDictionaryMatch(currentAddr) ? 'rgba(165, 255, 0, 0.07)' : '');
+                    });
+                }
+            });
+        }
+
+        function isHighlighted(byteAddr) {
+            if (!currentHighlight) return null;
+            return (byteAddr >= currentHighlight.startAddr && byteAddr < currentHighlight.startAddr + currentHighlight.length) ? currentHighlight.color : null;
+        }
+
+        function isDictionaryMatch(byteAddr) {
+            return currentDictionaryMatches.some(m => byteAddr >= m.offset && byteAddr < m.offset + m.length);
+        }
+
+        async function goToAddress(addr) {
+            if (addr >= loadedStartOffset && addr < loadedEndOffset) {
+                scrollToAddressInView(addr);
+                if (loadedEndOffset - addr < 512) loadBinaryDump(loadedEndOffset, PART_SIZE, true);
+                return;
+            }
+            lastTargetAddress = addr;
+            const blockIndex = Math.floor(addr / CHUNK_SIZE);
+            currentBlockIndex = blockIndex;
+            scrollToBlock(blockIndex);
+            const partStart = Math.floor((addr % CHUNK_SIZE) / PART_SIZE) * PART_SIZE;
+            let loadOffset = (blockIndex * CHUNK_SIZE) + partStart;
+            let loadSize = (loadOffset + PART_SIZE <= addr + 256) ? PART_SIZE * 2 : PART_SIZE;
+            await loadBinaryDump(loadOffset, loadSize, false);
+            scrollToAddressInView(addr, loadedStartOffset);
+        }
+
+        function scrollToAddressInView(addr, baseOffset = null) {
+            if (baseOffset === null) baseOffset = loadedStartOffset;
+            const lineIndex = Math.floor((addr - baseOffset) / 16);
+            
+            const colAddr = document.getElementById('dump-binary').querySelector('.col-addr');
+            if (colAddr) {
+                const addrCells = colAddr.querySelectorAll('.dump-cell');
+                if (addrCells[lineIndex]) {
+                    addrCells[lineIndex].scrollIntoView({ behavior: 'auto', block: 'center' });
+                }
+            }
+        }
+
+        async function loadBinaryDump(offset, size = CHUNK_SIZE, append = false) {
+            if (isLoading) return 0;
+            isLoading = true;
+            currentAbortController = new AbortController();
+            try {
+                const res = await fetch(`/api/dump/${offset}/${size}`, { signal: currentAbortController.signal });
+                const data = await res.json();
+                
+                const container = document.getElementById('dump-binary');
+                
+                // Ensure columns exist
+                let colAddr = container.querySelector('.col-addr');
+                let colHex = container.querySelector('.col-hex');
+                let colAscii = container.querySelector('.col-ascii');
+                
+                if (!colAddr) {
+                    container.innerHTML = '';
+                    colAddr = document.createElement('div'); colAddr.className = 'col-addr';
+                    colHex = document.createElement('div'); colHex.className = 'col-hex';
+                    colAscii = document.createElement('div'); colAscii.className = 'col-ascii';
+                    container.appendChild(colAddr);
+                    container.appendChild(colHex);
+                    container.appendChild(colAscii);
+                }
+
+                if (!append) {
+                    colAddr.innerHTML = '';
+                    colHex.innerHTML = '';
+                    colAscii.innerHTML = '';
+                    container.classList.remove('loading');
+                    loadedStartOffset = offset;
+                    loadedEndOffset = offset;
+                    currentDictionaryMatches = [];
+                }
+                
+                if (data.matches) currentDictionaryMatches = currentDictionaryMatches.concat(data.matches);
+
+                data.lines.forEach(line => {
+                    const lineAddr = parseInt(line.addr, 16);
+                    
+                    // 1. Address Cell
+                    const addrDiv = document.createElement('div');
+                    addrDiv.className = 'dump-cell';
+                    addrDiv.textContent = line.addr;
+                    colAddr.appendChild(addrDiv);
+                    
+                    // 2. Hex Cell
+                    const hexDiv = document.createElement('div');
+                    hexDiv.className = 'dump-cell';
+                    line.hex.split(' ').forEach((hex, i) => {
+                        const byteSpan = document.createElement('span');
+                        byteSpan.textContent = hex;
+                        const charAddr = lineAddr + i;
+                        const hl = isHighlighted(charAddr);
+                        if (hl) byteSpan.style.background = hl;
+                        else if (isDictionaryMatch(charAddr)) byteSpan.style.background = 'rgba(165, 255, 0, 0.07)';
+                        hexDiv.appendChild(byteSpan);
+                        if (i < 15) hexDiv.appendChild(document.createTextNode(' '));
+                    });
+                    colHex.appendChild(hexDiv);
+                    
+                    // 3. ASCII Cell
+                    const asciiDiv = document.createElement('div');
+                    asciiDiv.className = 'dump-cell';
+                    
+
+
+                    [...line.ascii].forEach((char, i) => {
+                        const charSpan = document.createElement('span');
+                        charSpan.textContent = char;
+                        const charAddr = lineAddr + i;
+                        const hl = isHighlighted(charAddr);
+                        if (hl) charSpan.style.background = hl; 
+                        else if (isDictionaryMatch(charAddr)) charSpan.style.background = 'rgba(165, 255, 0, 0.07)';
+                        asciiDiv.appendChild(charSpan);
+                    });
+                    colAscii.appendChild(asciiDiv);
+                });
+
+                totalBinarySize = data.total_size;
+                loadedEndOffset = offset + (data.lines.length * 16);
+                isPartialLoaded = (loadedEndOffset - loadedStartOffset < CHUNK_SIZE);
+                updateOffsetDisplay(loadedStartOffset);
+                
+                if (!append && lastTargetAddress !== null) scrollToAddressInView(lastTargetAddress);
+                
+                isLoading = false;
+                return data.total_size;
+
+            } catch (err) {
+                isLoading = false;
+                console.error(err);
+                return 0;
+            }
+        }
+
+        function updateOffsetDisplay(offset) {
+            const pct = ((offset / totalBinarySize) * 100).toFixed(1);
+            const currentW = densityData[currentBlockIndex]?.w || 0;
+            document.getElementById('offset-display').textContent = `0x${offset.toString(16).toUpperCase().padStart(8, '0')} - 0x${loadedEndOffset.toString(16).toUpperCase().padStart(8, '0')} | Block ${currentBlockIndex}/${densityData.length} (${pct}%) | Density: ${currentW}`;
+        }
+
+        async function loadSheet() {
+            try {
+                const res = await fetch('/api/sheet');
+                const data = await res.json();
+                const container = document.getElementById('sheet-content');
+
+                // Update Filename
+                const sheetFilename = data.filename || 'system_prompts_full.md';
+                const header = document.getElementById('sheet-header-title');
+                if (header) header.textContent = `Sheet: ${sheetFilename}`;
+
+                if (data.lines) {
+                    container.innerHTML = '';
+                    data.lines.forEach((line, idx) => {
+                        const div = document.createElement('div');
+                        div.className = 'sheet-line';
+                        div.onclick = () => {
+                            const input = document.getElementById('search-input');
+                            input.value = line.trim();
+                            executeSearch();
+                        };
+                        const num = document.createElement('span'); num.className = 'line-num'; num.textContent = idx + 1;
+                        const text = document.createElement('span'); text.className = 'line-text'; text.textContent = line;
+                        div.appendChild(num); div.appendChild(text); container.appendChild(div);
+                    });
+                    return data.lines.length;
+                }
+                return 0;
+            } catch (e) {
+                console.error(e);
+                return 0;
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // 辞書パネル・リロード・ファイル情報
+        // -------------------------------------------------------------------
+
+        async function loadFileInfo() {
+            try {
+                const res = await fetch('/api/info');
+                const data = await res.json();
+                const binaryFilenameSpan = document.getElementById('binary-filename');
+
+                binaryFilenameSpan.textContent = `Binary: ${data.filename || '(none)'}`;
+                // The span itself is now clickable and styled, so no need to manage a separate button's display
+                // Also, no longer need to check for '(none)' to display a button, as the filename text itself is the button.
+            } catch (err) {
+                console.error('loadFileInfo:', err);
+                const binaryFilenameSpan = document.getElementById('binary-filename'); // Re-get if needed for error display
+                binaryFilenameSpan.textContent = 'Binary: (Error loading file info)'; // Display error message
+                // Ensure it's still clickable even on error
+            }
+        }
+
+        async function selectBinaryFile() {
+            console.log('selectBinaryFile: function called!'); // DEBUG
+            const filenameSpan = document.getElementById('binary-filename');
+            filenameSpan.textContent = '...'; // Indicate loading
+
+            try {
+                const res = await fetch('/api/select-binary', { method: 'POST' });
+                const data = await res.json();
+                if (data.ok) {
+                    showSearchFeedback(`Binary loaded: ${data.filename}`, 'info');
+                    location.reload();
+                } else {
+                    showSearchFeedback(`Failed to select binary: ${data.error}`, 'error');
+                    location.reload(); // Reload anyway to reset UI
+                }
+            } catch (err) {
+                showSearchFeedback(`Error: ${err.message}`, 'error');
+                location.reload(); // Reload anyway to reset UI
+            }
+        }
+
+        async function loadDictWords() {
+            try {
+                const res = await fetch('/api/prompt-words');
+                const data = await res.json();
+                const ta = document.getElementById('dict-textarea');
+                // 空行を先頭に入れ、1語1行で表示
+                ta.value = '\n' + (data.words || []).join('\n');
+            } catch (err) { console.error('loadDictWords:', err); }
+        }
+
+        function getDictWordsFromUI() {
+            const ta = document.getElementById('dict-textarea');
+            // テキストエリアの内容から単語一覧を抽出（空行は除去しない、先頭の区切り空行のみ除去）
+            const lines = ta.value.split('\n');
+            // 先頭の空行をスキップし、実単語行のみ返す
+            const words = [];
+            let started = false;
+            for (const line of lines) {
+                if (!started && line.trim() === '') continue;
+                started = true;
+                words.push(line);
+            }
+            return words;
+        }
+
+        async function saveDictWords() {
+            const words = getDictWordsFromUI();
+            try {
+                const res = await fetch('/api/prompt-words', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ words }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    console.log(`Saved ${data.count} prompt words`);
+                }
+            } catch (err) { console.error('saveDictWords:', err); }
+        }
+
+        async function reloadServer() {
+            const btn = document.querySelector('.reload-btn');
+            btn.textContent = 'Reloading...';
+            btn.disabled = true;
+            try {
+                // まず辞書を保存
+                await saveDictWords();
+                // サーバーリロード
+                const res = await fetch('/api/reload', { method: 'POST' });
+                const data = await res.json();
+                if (data.ok) {
+                    document.getElementById('binary-filename').textContent = `Binary: ${data.filename || '(none)'}`;
+                    // 密度データとミニマップを再取得
+                    await loadDensity();
+                    // 現在位置のバイナリダンプを再読み込み
+                    await loadBinaryDump(currentBlockIndex * CHUNK_SIZE, PART_SIZE);
+                    showSearchFeedback(`Reload complete: ${data.density_blocks} blocks, maxW=${data.max_density}`, 'info');
+
+                    // 成功したら dirty 解除
+                    btn.classList.remove('dirty');
+                    // バイナリが再読み込みされたので undo/redo をリセット
+                    undoStack = [];
+                    redoStack = [];
+                    savedStackLength = 0;
+                    updateSaveBtn();
+                    // 履歴のsaved/unsavedマークをクリア
+                    const histList = document.getElementById('history-list');
+                    histList.querySelectorAll('.h-saved, .h-unsaved').forEach(el => el.remove());
+                }
+            } catch (err) {
+                console.error('reloadServer:', err);
+                showSearchFeedback('Reload failed: ' + err.message, 'error');
+            } finally {
+                btn.textContent = 'Server Reload';
+                btn.disabled = false;
+            }
+        }
+
+        async function init() {
+            setupControls();
+
+
+            // Custom Copy Handler: Remove newlines for continuous binary/ascii stream
+            document.addEventListener('copy', (e) => {
+                const selection = window.getSelection();
+                if (selection.isCollapsed) return;
+
+                // Helper: Check if node is inside target columns
+                const isTargetCol = (node) => {
+                    if (!node) return false;
+                    const elem = node.nodeType === 1 ? node : node.parentElement;
+                    return elem && (elem.closest('.col-hex') || elem.closest('.col-ascii'));
+                };
+
+                // Check start/end of selection
+                // Check if Hex column
+                const getClosest = (n, sel) => {
+                    if (!n) return null;
+                    const el = n.nodeType === 1 ? n : n.parentElement;
+                    return el && el.closest(sel);
+                };
+                const isHex = getClosest(selection.anchorNode, '.col-hex') || getClosest(selection.focusNode, '.col-hex');
+
+                if (isTargetCol(selection.anchorNode) || isTargetCol(selection.focusNode)) {
+                    let text = selection.toString();
+                    // Hex: space, ASCII: empty (join)
+                    text = text.replace(/[\r\n]+/g, isHex ? ' ' : '');
+                    e.clipboardData.setData('text/plain', text);
+                    e.preventDefault();
+                }
+            });
+            // Load binary data first
+            const [binarySize, _] = await Promise.all([loadBinaryDump(0, PART_SIZE), loadSheet(), loadDensity()]);
+            await loadFileInfo();
+            await loadDictWords();
+
+            // Setup UI
+            const dictTextarea = document.getElementById('dict-textarea');
+            const dictOverlay = document.getElementById('dict-overlay');
+            const reloadBtn = document.querySelector('.reload-btn');
+
+            // Overlay Sync Logic
+            if (dictTextarea && dictOverlay) {
+                const updateOverlay = () => {
+                    let text = dictTextarea.value;
+                    // HTML Escape
+                    text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    // Visualize Spaces (Dark Yellow Background)
+                    text = text.replace(/ /g, '<span class="space-mark"> </span>');
+                    // Handle trailing newline
+                    if (text.endsWith('\n')) text += '<br>';
+
+                    dictOverlay.innerHTML = text;
+                };
+
+                dictTextarea.addEventListener('input', () => {
+                    if (reloadBtn) { reloadBtn.classList.add('dirty'); reloadBtn.textContent = 'Save & Reload'; }
+                    updateOverlay();
+                });
+
+                // Sync Scroll
+                const syncScroll = () => {
+                    dictOverlay.scrollTop = dictTextarea.scrollTop;
+                    dictOverlay.scrollLeft = dictTextarea.scrollLeft;
+                };
+                dictTextarea.addEventListener('scroll', syncScroll);
+                // Sync Resize
+                new ResizeObserver(syncScroll).observe(dictTextarea);
+
+                // Initial State
+                updateOverlay();
+
+                // --- Sheet Controls ---
+                const sheetInput = document.getElementById('sheet-file-input');
+                const loadBtn = document.getElementById('btn-sheet-load');
+                const pasteBtn = document.getElementById('btn-sheet-paste');
+
+                async function submitSheetUpdate(content) {
+                    try {
+                        const res = await fetch('/api/sheet', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: content })
+                        });
+                        const data = await res.json();
+                        if (data.ok) {
+                            const fb = document.getElementById('search-feedback');
+                            if (fb) { fb.textContent = `Updated: ${data.filename}`; fb.style.display = 'block'; setTimeout(() => fb.style.display = 'none', 3000); }
+                            await loadSheet();
+                            return data.filename;
+                        } else {
+                            alert(`Error: ${data.error}`);
+                        }
+                    } catch (e) {
+                        console.error('Update failed', e);
+                        alert('Network Error');
+                    }
+                    return null;
+                }
+
+                if (loadBtn && sheetInput) {
+                    loadBtn.addEventListener('click', () => sheetInput.click());
+                    sheetInput.addEventListener('change', (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = async (ev) => {
+                            if (confirm(`Load content from ${file.name}?`)) {
+                                const newName = await submitSheetUpdate(ev.target.result);
+                                if (newName) {
+                                    loadBtn.textContent = newName;
+                                    loadBtn.style.color = '#fff';
+                                }
+                            }
+                        };
+                        reader.readAsText(file);
+                        sheetInput.value = '';
+                    });
+                }
+
+                if (pasteBtn) {
+                    pasteBtn.addEventListener('click', async () => {
+                        try {
+                            const text = await navigator.clipboard.readText();
+                            if (text && confirm('Import from clipboard?')) {
+                                const newName = await submitSheetUpdate(text);
+                                if (newName) {
+                                    loadBtn.textContent = newName;
+                                    loadBtn.style.color = '#fff';
+                                }
+                            }
+                        } catch (err) {
+                            alert('Clipboard access failed');
+                        }
+                    });
+                }
+            }
+
+            document.getElementById('status-text').textContent = `Binary: ${(binarySize / (1024 * 1024)).toFixed(2)} MB | Cursor ↑↓: 1block | PgUp/Dn: 4blocks`;
+
+            // --- Save Binary ---
+            window.saveBinary = async function() {
+                if (!confirm('現在の状態をファイルに上書き保存しますか？\n(.bakファイルが作成されます)')) return;
+
+                const btn = document.getElementById('save-binary-btn');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerText = 'Saving...';
+                }
+
+                try {
+                    // 5秒でタイムアウト
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+                    const res = await fetch('/api/save-binary', { 
+                        method: 'POST',
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+                    
+                    const data = await res.json();
+                    
+                    if (data.ok) {
+                        // savedStackLength を更新して clean 状態に
+                        savedStackLength = undoStack.length;
+                        updateSaveBtn();
+                        // 履歴に saved マークを付ける
+                        markHistorySaved();
+                        alert(`保存しました。\nPath: ${data.path}`);
+                    } else {
+                        alert(`保存エラー: ${data.error}\n(ファイルが使用中の可能性があります)`);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    if (err.name === 'AbortError') {
+                        alert('タイムアウトしました。\nファイルがロックされているか、サーバーが重いです。\n(現在実行中の可能性があります)');
+                    } else {
+                        alert('通信エラーが発生しました: ' + err);
+                    }
+                } finally {
+                    if (btn) {
+                        btn.innerText = 'Save';
+                        updateSaveBtn();
+                    }
+                }
+            };
+        }
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+
+</html>
