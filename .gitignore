@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# User config
+path.ini
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Binary Data
+*.bin
+*.dat
+*.db
+*.sqlite
+*.log
+
+# System / AGENT
+.gemini/
+.agent/
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Backup / Temporary
+*.bak
+*.tmp
+*.swp
+*~
+
+# Screenshots
+*.png
+*.jpg
+*.webp
