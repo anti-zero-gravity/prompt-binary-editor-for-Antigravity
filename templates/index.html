@@ -1413,6 +1413,7 @@
                     
 
 
+                    const hexBytes = line.hex.split(' ');
                     [...line.ascii].forEach((char, i) => {
                         const charSpan = document.createElement('span');
                         charSpan.textContent = char;
@@ -1420,6 +1421,8 @@
                         const hl = isHighlighted(charAddr);
                         if (hl) charSpan.style.background = hl; 
                         else if (isDictionaryMatch(charAddr)) charSpan.style.background = 'rgba(165, 255, 0, 0.07)';
+                        // 実際のピリオド (0x2E) を黄色で強調
+                        if (hexBytes[i] === '2E') charSpan.style.color = '#dcdcaa';
                         asciiDiv.appendChild(charSpan);
                     });
                     colAscii.appendChild(asciiDiv);
