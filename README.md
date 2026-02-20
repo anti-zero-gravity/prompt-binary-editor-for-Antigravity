@@ -64,7 +64,8 @@ pip install -r requirements.txt
 | `Ctrl + Z` | Undo（元に戻す） |
 | `Ctrl + Shift + Z` / `Ctrl + Y` | Redo（やり直し） |
 | `Delete` | 選択範囲を `0x20` (スペース) で埋める |
-| `Ctrl + Enter` | 検索実行 |
+| `Ctrl + Enter` | 検索実行 / 次の候補 |
+| `Ctrl + Shift + Enter` | 前の候補 (循環) |
 
 ## 免責事項
 このツールは自己責任で使用してください。バイナリの直接編集にはリスクが伴います。

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <!--
   Binary Prompt Editor — フロントエンドUI
 
@@ -13,7 +13,8 @@
     Delete:  選択範囲を0x20(スペース)で埋める
     Ctrl+Z:  直前の編集操作を元に戻す
     Ctrl+Shift+Z / Ctrl+Y: やり直し
-    Ctrl+Enter: 検索実行
+    Ctrl+Enter: 検索実行 / 次の候補
+    Ctrl+Shift+Enter: 前の候補 (循環)
 -->
 <html lang="ja">
 
@@ -836,7 +837,7 @@
         let currentMatchIndex = 0;
         let cachedMatches = [];
 
-        async function executeSearch() {
+        async function executeSearch(direction = 1) {
             const searchInput = document.getElementById('search-input');
             if (!searchInput) return;
             const searchText = searchInput.value.trim();
@@ -845,9 +846,9 @@
                 return;
             }
 
-            // 前回と同じ検索ワードなら「次へ」移動
+            // 前回と同じ検索ワードなら候補間を移動 (direction: 1=次, -1=前)
             if (searchText === lastSearchQuery && cachedMatches.length > 0) {
-                currentMatchIndex = (currentMatchIndex + 1) % cachedMatches.length;
+                currentMatchIndex = (currentMatchIndex + direction + cachedMatches.length) % cachedMatches.length;
                 const match = cachedMatches[currentMatchIndex];
                 highlightRange(match.offset, match.length, HIGHLIGHT_COLOR_DARK);
                 showSearchFeedback(`${currentMatchIndex + 1}/${cachedMatches.length} 件目: 0x${match.offset.toString(16).toUpperCase()} に移動`);
@@ -1214,12 +1215,12 @@
                 dumpContainer.addEventListener('scroll', onDumpScroll);
                 dumpContainer.addEventListener('mouseenter', loadCurrentBlockFull);
             }
-            // 検索窓: Ctrl+Enter で検索
+            // 検索窓: Ctrl+Enter=次, Ctrl+Shift+Enter=前 (循環)
             if (searchInput) {
                 searchInput.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                         e.preventDefault();
-                        executeSearch();
+                        executeSearch(e.shiftKey ? -1 : 1);
                     }
                 });
                 searchInput.addEventListener('input', updateEditButtonState);

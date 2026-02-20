@@ -452,6 +452,8 @@ def map_line_ngram(bd: BinaryData, text: str,
     # ヒット率が高い順にソート
     results.sort(key=lambda r: r.hit_ratio, reverse=True)
 
+    return results
+
 
 def map_sheet(bd: BinaryData, lines: list[str],
               min_fragment_len: int = 4,

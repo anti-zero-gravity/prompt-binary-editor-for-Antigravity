@@ -419,6 +419,12 @@ def map_line():
         last = located[-1]
         end_offset = last["offset"] + last["length"]
         total_length = end_offset - start_offset
+        # 範囲サイズフィルタ: 検索テキスト長の2倍を超えたら偽陽性として破棄
+        text_byte_len = len(text.strip().encode("utf-8"))
+        if total_length > text_byte_len * 2:
+            start_offset = -1
+            total_length = 0
+            frag_list = []  # フラグメントも破棄
     else:
         start_offset = -1
         total_length = 0
