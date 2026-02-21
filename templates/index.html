@@ -1,13 +1,6 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <!--
   Binary Prompt Editor — フロントエンドUI
-
-  レイアウト:
-    上段左: 操作履歴パネル（スクロール付き、無限件数）
-    上段左2: 辞書パネル（Server Reload + prompt_words 編集）
-    上段右: バイナリHexダンプ + ASCII密度ミニマップ
-    中段:   検索窓（textarea）+ 検索/編集ボタン
-    下段:   プロンプトシート (system_prompts_full.md)
 
   キーバインド:
     Delete:  選択範囲を0x20(スペース)で埋める
@@ -69,7 +62,7 @@
             border-bottom: 2px solid #4ec9b0;
         }
 
-        /* --- 履歴パネル (上段左) --- */
+        /* --- 履歴パネル --- */
         .history-panel {
             width: 340px;
             min-width: 200px;
@@ -124,7 +117,6 @@
             font-size: 11px;
         }
 
-        /* 取り消し線 (Undo済みエントリ) */
         .history-entry.undone {
             text-decoration: line-through;
             opacity: 0.45;
@@ -145,7 +137,8 @@
             font-weight: bold;
             margin-left: 8px;
         }
-        /* --- 辞書パネル (上段左2) --- */
+
+        /* --- 辞書パネル --- */
         .dict-panel {
             width: 115px;
             min-width: 100px;
@@ -186,39 +179,42 @@
             animation: blink-text 1s ease-in-out infinite;
         }
 
-        @keyframes blink-text {
-            0%, 100% { color: #fff; }
-            50% { color: rgba(255, 255, 255, 0.2); }
-        }
-
         .reload-btn.dirty:hover {
             background: #c0392b;
             animation: none;
             color: #fff;
         }
 
-        @keyframes blink-save {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
+        @keyframes blink-text {
+
+            0%,
+            100% {
+                color: #fff;
+            }
+
+            50% {
+                color: rgba(255, 255, 255, 0.2);
+            }
         }
+
+        @keyframes blink-save {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
         .dict-content {
             flex: 1;
             padding: 4px 6px;
             font-size: 12px;
             line-height: 1.6;
             overflow: hidden;
-        }
-
-        .dict-word {
-            white-space: pre;
-            color: #d4d4d4;
-            cursor: text;
-        }
-
-        .dict-word .space-marker {
-            color: #808080;
-            background: #2a2a3e;
-            border-radius: 1px;
         }
 
         .dict-editor-wrapper {
@@ -264,27 +260,10 @@
 
         .space-mark {
             background-color: #665c00;
+            color: #00bfff;
         }
 
-        color: #00bfff;
-        }
-
-        .dict-textarea {
-            width: 100%;
-            height: 100%;
-            background: transparent;
-            color: #d4d4d4;
-            border: none;
-            outline: none;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 12px;
-            line-height: 1.6;
-            resize: none;
-            overflow: hidden;
-            padding: 0;
-        }
-
-        /* --- Hexダンプエリア (上段右) --- */
+        /* --- Hexダンプエリア --- */
         .hex-area {
             flex: 1;
             display: flex;
@@ -299,7 +278,6 @@
             align-items: center;
             gap: 12px;
             flex: 0 0 auto;
-            /* 固定高にする */
         }
 
         .search-box {
@@ -339,6 +317,11 @@
             background: #3eb099;
         }
 
+        .search-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
         .header-right-group {
             display: flex;
             align-items: center;
@@ -354,7 +337,6 @@
             border-radius: 3px;
             transition: background 0.2s;
             white-space: nowrap;
-            /* Prevent button text from wrapping */
         }
 
         .header-btn:hover {
@@ -363,9 +345,7 @@
 
         .clickable-filename {
             background-color: #4ec9b0;
-            /* Green background */
             color: white;
-            /* White text */
             padding: 2px 5px;
             border-radius: 3px;
             cursor: pointer;
@@ -375,7 +355,6 @@
 
         .clickable-filename:hover {
             background-color: #3eb099;
-            /* Slightly darker green on hover */
         }
 
         #edit-button {
@@ -384,11 +363,6 @@
 
         #edit-button:hover {
             background: #d68910;
-        }
-
-        .search-btn svg {
-            width: 20px;
-            height: 20px;
         }
 
         .panel-content {
@@ -413,7 +387,6 @@
             background: #252526;
             border: 1px solid #3c3c3c;
             border-left: 3px solid #252526;
-            /* 常に3px確保してレイアウトシフトを防ぐ */
         }
 
         .minimap-wrapper.focused {
@@ -438,7 +411,6 @@
             background: #252526;
         }
 
-        /* カーソルライン: 中央配置、短め、暗めの黄色 */
         .minimap-cursor {
             position: absolute;
             left: 25%;
@@ -456,24 +428,62 @@
             flex-direction: row;
             min-height: 100%;
         }
-        .col-addr, .col-hex, .col-ascii {
+
+        .col-addr,
+        .col-hex,
+        .col-ascii {
             display: flex;
             flex-direction: column;
         }
-        .col-addr { width: 90px; min-width: 90px; flex-shrink: 0; border-right: 1px solid #333; }
-        .col-hex { width: 440px; min-width: 440px; flex-shrink: 0; padding-left: 10px; }
-        .col-ascii { flex-grow: 1; min-width: 100px; border-left: 1px solid #333; padding-left: 10px; }
-        .dump-cell { height: 20px; min-height: 20px; line-height: 20px; font-size: 13px; white-space: pre; }
-        .col-addr .dump-cell { color: #569cd6; }
-        .col-hex .dump-cell { color: #ce9178; letter-spacing: 1px; }
-        .col-ascii .dump-cell { color: #6a9955; }
 
+        .col-addr {
+            width: 90px;
+            min-width: 90px;
+            flex-shrink: 0;
+            border-right: 1px solid #333;
+        }
 
+        .col-hex {
+            width: 440px;
+            min-width: 440px;
+            flex-shrink: 0;
+            padding-left: 10px;
+        }
+
+        .col-ascii {
+            flex-grow: 1;
+            min-width: 100px;
+            border-left: 1px solid #333;
+            padding-left: 10px;
+        }
+
+        .dump-cell {
+            height: 20px;
+            min-height: 20px;
+            line-height: 20px;
+            font-size: 13px;
+            white-space: pre;
+        }
+
+        .col-addr .dump-cell {
+            color: #569cd6;
+        }
+
+        .col-hex .dump-cell {
+            color: #ce9178;
+            letter-spacing: 1px;
+        }
+
+        .col-ascii .dump-cell {
+            color: #6a9955;
+        }
+
+        /* シート */
         .sheet-line {
             display: flex;
             font-size: 13px;
             line-height: 1.8;
-            padding: 2px 0;
+            cursor: pointer;
             border-bottom: 1px solid #2d2d2d;
         }
 
@@ -484,6 +494,14 @@
         .sheet-line.active {
             background: #444422;
             border-left: 3px solid #b4a032;
+        }
+
+        .sheet-line.non-ascii,
+        .sheet-line.non-ascii .line-text,
+        .sheet-line.non-ascii .line-num {
+            color: #4ec9b0;
+            cursor: text;
+            user-select: text;
         }
 
         .line-num {
@@ -534,14 +552,12 @@
         #search-feedback {
             position: fixed;
             bottom: 40px;
-            /* footerより少し上に上げる */
             right: 20px;
             background: #2d2d2d;
             color: #eeeeee;
             padding: 12px 20px;
             font-size: 14px;
             z-index: 9999;
-            /* 最前面 */
             border-radius: 4px;
             border-left: 5px solid #4ec9b0;
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
@@ -567,25 +583,28 @@
     <header>
         <h1>Binary Prompt Editor</h1>
         <div class="header-right-group">
-            <span id="offset-display" style="color: #808080; font-size: 12px;">Offset: 0x00000000</span>
+            <span id="offset-display" style="color:#808080;font-size:12px;">Offset: 0x00000000</span>
             <span id="binary-info"
-                style="color: #808080; font-size: 12px; margin-left: 16px; display: flex; align-items: center;">
+                style="color:#808080;font-size:12px;margin-left:16px;display:flex;align-items:center;">
                 <span id="binary-filename" class="clickable-filename" onclick="selectBinaryFile()">Binary:
                     (loading...)</span>
-                <button id="save-binary-btn" class="header-btn" style="margin-left: 8px; background: #ccc; border-color: #ccc; color: #888; cursor: not-allowed;" disabled onclick="saveBinary()">Save</button>
+                <button id="save-binary-btn" class="header-btn"
+                    style="margin-left:8px;background:#ccc;border-color:#ccc;color:#888;cursor:not-allowed;" disabled
+                    onclick="saveBinary()">Save</button>
             </span>
         </div>
     </header>
 
     <div class="container">
-        <!-- 上段: 左=履歴、右=Hexダンプ+ミニマップ -->
         <div class="panel panel-top">
             <div class="history-panel">
-                <div class="panel-header">Operation History <span id="history-count" style="color:#808080;">(0)</span></div>
+                <div class="panel-header">Operation History <span id="history-count" style="color:#808080;">(0)</span>
+                </div>
                 <div class="history-list" id="history-list"></div>
             </div>
             <div class="dict-panel">
-                <div class="panel-header"><button class="reload-btn" onclick="reloadServer()">Server Reload</button>
+                <div class="panel-header">
+                    <button class="reload-btn" onclick="reloadServer()">Server Reload</button>
                 </div>
                 <div class="dict-content">
                     <div class="dict-editor-wrapper">
@@ -596,7 +615,6 @@
             </div>
             <div class="hex-area">
                 <div class="panel-content" id="panel-top">
-
                     <div id="dump-binary" class="loading">Loading binary...</div>
                 </div>
                 <div class="minimap-wrapper">
@@ -631,18 +649,18 @@
 
         <div class="panel">
             <div class="panel-content" id="panel-bottom">
-                <div class="panel-header" id="sheet-header-title">Sheet: system_prompts_full.md</div>
+                <div class="panel-header" id="sheet-header-title">Sheet: system_prompts.md</div>
                 <div id="sheet-content" class="loading">Loading sheet...</div>
             </div>
         </div>
     </div>
 
-    <div id="search-feedback">検索結果がここに表示されます</div>
+    <div id="search-feedback"></div>
+
     <footer id="footer-status">
         <span id="status-text">Initializing...</span>
         <div id="footer-actions">
-            <!-- Hidden Load Input -->
-            <input type="file" id="sheet-file-input" accept=".md,.txt,.csv" style="display: none;">
+            <input type="file" id="sheet-file-input" accept=".md,.txt,.csv" style="display:none;">
             <button class="footer-btn" id="btn-sheet-load" title="テキストファイルを読み込み">Load</button>
             <button class="footer-btn" id="btn-sheet-paste" title="クリップボードから貼り付け">Clip</button>
         </div>
@@ -652,7 +670,7 @@
         // -------------------------------------------------------------------
         // グローバル変数
         // -------------------------------------------------------------------
-        let CHUNK_SIZE = 8192; // 8KB
+        let CHUNK_SIZE = 8192;
         const PART_SIZE = 512;
         let totalBinarySize = 0;
         let currentBlockIndex = 0;
@@ -663,14 +681,14 @@
         let loadedEndOffset = 0;
         let isLoading = false;
         let maxW = 1.0;
-        let currentHighlight = null;      // {startAddr, length, color}
+        let currentHighlight = null;
         let currentDictionaryMatches = [];
-        const DEFAULT_HIGHLIGHT_COLOR = 'rgba(100, 80, 10, 0.6)';
-        const HIGHLIGHT_COLOR_DARK = 'rgba(100, 80, 10, 0.6)';
 
-        // --- 編集機能用 ---
-        let undoStack = [];               // [{offset, original, description}] (無制限)
-        let redoStack = [];               // [{offset, newBytes, description}] (undo取り消し待ち)
+        // 修正: 同値だった2定数を1つに統一
+        const HIGHLIGHT_COLOR = 'rgba(100, 80, 10, 0.6)';
+
+        let undoStack = [];
+        let redoStack = [];
         let savedStackLength = 0;
 
         function updateSaveBtn() {
@@ -695,22 +713,21 @@
                 if (fnSpan) fnSpan.style.opacity = '1';
             }
         }
-        let activeSheetLine = -1;         // 現在アクティブなシート行番号 (1-indexed)
+
+        let activeSheetLine = -1;
 
         // Request control
         let lastRequestTime = 0;
         let debounceTimer = null;
         let pendingRequest = null;
+        // 修正: AbortController を正しく使うため管理変数を維持
         let currentAbortController = null;
 
         function throttledLoadBinaryDump(offset, size) {
             const now = Date.now();
             const elapsed = now - lastRequestTime;
             pendingRequest = { offset, size };
-            if (debounceTimer) {
-                clearTimeout(debounceTimer);
-                debounceTimer = null;
-            }
+            if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
             if (elapsed >= 100) {
                 lastRequestTime = now;
                 loadBinaryDump(offset, size);
@@ -727,11 +744,12 @@
             }
         }
 
+
+
         function densityToColor(density) {
             const w = density.w || 0;
             let red = 20, green = 20, blue = 20;
             if (w > 0 && maxW > 0) {
-                // ユーザー要望: w=1なら55、最大255 (範囲: 55-255)
                 const minGreen = 55;
                 const range = 255 - minGreen;
                 const norm = Math.min(1.0, w / maxW);
@@ -764,8 +782,7 @@
         }
 
         function getCursorOffset() {
-            const container = document.getElementById('minimap-container');
-            return Math.floor(container.clientHeight / 2);
+            return Math.floor(document.getElementById('minimap-container').clientHeight / 2);
         }
 
         function getBlockAtCursor() {
@@ -796,11 +813,10 @@
             }
         }
 
+
         function onDumpScroll() {
             const container = document.getElementById('panel-top');
-            const scrollTop = container.scrollTop;
-            const scrollHeight = container.scrollHeight;
-            const clientHeight = container.clientHeight;
+            const { scrollTop, scrollHeight, clientHeight } = container;
             if (scrollHeight - (scrollTop + clientHeight) < 100) {
                 if (!isLoading && loadedEndOffset < totalBinarySize) {
                     loadBinaryDump(loadedEndOffset, PART_SIZE, true);
@@ -816,23 +832,16 @@
 
         function showSearchFeedback(message, type = 'info') {
             const feedback = document.getElementById('search-feedback');
-            if (!feedback) {
-                alert(message);
-                return;
-            }
+            if (!feedback) { alert(message); return; }
             feedback.textContent = message;
             feedback.style.display = 'block';
             feedback.style.opacity = '1';
             feedback.classList.remove('error', 'warning');
             if (type !== 'info') feedback.classList.add(type);
             if (window.feedbackTimer) clearTimeout(window.feedbackTimer);
-            window.feedbackTimer = setTimeout(() => {
-                feedback.style.display = 'none';
-            }, 8000);
+            window.feedbackTimer = setTimeout(() => { feedback.style.display = 'none'; }, 8000);
         }
 
-
-        // 検索キャッシュ
         let lastSearchQuery = "";
         let currentMatchIndex = 0;
         let cachedMatches = [];
@@ -841,22 +850,17 @@
             const searchInput = document.getElementById('search-input');
             if (!searchInput) return;
             const searchText = searchInput.value.trim();
-            if (!searchText) {
-                showSearchFeedback("検索ワードを入力してください。", "warning");
-                return;
-            }
+            if (!searchText) { showSearchFeedback("検索ワードを入力してください。", "warning"); return; }
 
-            // 前回と同じ検索ワードなら候補間を移動 (direction: 1=次, -1=前)
             if (searchText === lastSearchQuery && cachedMatches.length > 0) {
                 currentMatchIndex = (currentMatchIndex + direction + cachedMatches.length) % cachedMatches.length;
                 const match = cachedMatches[currentMatchIndex];
-                highlightRange(match.offset, match.length, HIGHLIGHT_COLOR_DARK);
+                highlightRange(match.offset, match.length, HIGHLIGHT_COLOR);
                 showSearchFeedback(`${currentMatchIndex + 1}/${cachedMatches.length} 件目: 0x${match.offset.toString(16).toUpperCase()} に移動`);
                 return;
             }
 
             try {
-                // 新規検索
                 showSearchFeedback('Searching...', 'info');
                 const res = await fetch(`/api/search?q=${encodeURIComponent(searchText)}`);
                 const matches = await res.json();
@@ -865,10 +869,8 @@
                     cachedMatches = matches;
                     lastSearchQuery = searchText;
                     currentMatchIndex = 0;
-
                     const match = matches[0];
-                    highlightRange(match.offset, match.length, HIGHLIGHT_COLOR_DARK);
-
+                    highlightRange(match.offset, match.length, HIGHLIGHT_COLOR);
                     if (matches.length === 1) {
                         showSearchFeedback(`1件ヒット: 0x${match.offset.toString(16).toUpperCase()}`);
                     } else {
@@ -877,12 +879,11 @@
                 } else {
                     cachedMatches = [];
                     lastSearchQuery = searchText;
-
                     try {
                         const mapRes = await fetch(`/api/map-line?text=${encodeURIComponent(searchText)}`);
                         const mapData = await mapRes.json();
                         if (mapData.start_offset >= 0 && mapData.total_length > 0) {
-                            highlightRange(mapData.start_offset, mapData.total_length, HIGHLIGHT_COLOR_DARK);
+                            highlightRange(mapData.start_offset, mapData.total_length, HIGHLIGHT_COLOR);
                             const addr = mapData.start_offset_hex;
                             if (mapData.binary_text) {
                                 document.getElementById('search-input').value = mapData.binary_text;
@@ -923,20 +924,6 @@
             }
         }
 
-        // -------------------------------------------------------------------
-        // バイナリ書き込みヘルパー
-        //   writeBinary() で /api/write 呼び出し、undo 用に元データ保存
-        //   成功時: redoスタッククリア + 再描画
-        // -------------------------------------------------------------------
-
-        /**
-         * バイナリの指定オフセットにバイトを書き込む。
-         * @param {number} offset - 書き込み開始オフセット
-         * @param {number[]} bytes - 書き込むバイト配列 (0-255)
-         * @param {string} description - 履歴表示用の説明
-         * @returns {Promise<boolean>} 成功したか
-         * 新操作のためredoスタックを破棄し、取り消し線付き履歴も削除する。
-         */
         async function writeBinary(offset, bytes, description = '') {
             try {
                 const res = await fetch('/api/write', {
@@ -945,16 +932,10 @@
                     body: JSON.stringify({ offset, bytes }),
                 });
                 const data = await res.json();
-                if (!data.ok) {
-                    showSearchFeedback(`書き込みエラー: ${data.error}`, 'error');
-                    return false;
-                }
-                // undo スタックに元データを保存
+                if (!data.ok) { showSearchFeedback(`書き込みエラー: ${data.error}`, 'error'); return false; }
                 undoStack.push({ offset, original: data.original, description });
-                // 新操作 → redoスタック破棄 + 取り消し線履歴削除
                 redoStack = [];
                 clearUndoneHistoryEntries();
-                // 表示を更新
                 await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
                 if (currentHighlight) updateVisibleHighlights();
                 updateSaveBtn();
@@ -966,13 +947,9 @@
             }
         }
 
-        /**
-         * 選択範囲を 0x20 (スペース) で埋める (DELキー)
-         */
         async function deleteSelection() {
             if (!currentHighlight || currentHighlight.length <= 0) {
-                showSearchFeedback('範囲が選択されていません', 'warning');
-                return;
+                showSearchFeedback('範囲が選択されていません', 'warning'); return;
             }
             const { startAddr, length } = currentHighlight;
             const spaceBytes = new Array(length).fill(0x20);
@@ -985,13 +962,9 @@
             }
         }
 
-        /**
-         * 検索窓のテキストをASCIIとして選択範囲に書き込む (編集ボタン)
-         */
         async function writeFromSearchBox() {
             if (!currentHighlight || currentHighlight.length <= 0) {
-                showSearchFeedback('範囲が選択されていません', 'warning');
-                return;
+                showSearchFeedback('範囲が選択されていません', 'warning'); return;
             }
             const searchInput = document.getElementById('search-input');
             const text = searchInput.value;
@@ -1012,21 +985,9 @@
 
         // -------------------------------------------------------------------
         // Undo / Redo
-        //   Undo:  最新履歴に取り消し線を付け、バイナリを復元
-        //   Redo:  取り消し線を解除し、バイナリを再適用
-        //   新操作時: 取り消し線履歴を全削除 + redoスタック破棄
         // -------------------------------------------------------------------
-
-
-        /**
-         * 直前の操作を元に戻す (Ctrl+Z)
-         * 履歴の最後の非取消エントリに取り消し線を付ける
-         */
         async function undoLast() {
-            if (undoStack.length === 0) {
-                showSearchFeedback('Undo する操作がありません', 'warning');
-                return;
-            }
+            if (undoStack.length === 0) { showSearchFeedback('Undo する操作がありません', 'warning'); return; }
             const last = undoStack.pop();
             try {
                 const res = await fetch('/api/write', {
@@ -1036,11 +997,9 @@
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    // redo用に保存 (上書き前のデータ = 操作後のデータ)
                     redoStack.push({ offset: last.offset, newBytes: data.original, original: last.original, description: last.description });
                     await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
                     if (currentHighlight) updateVisibleHighlights();
-                    // 履歴の最後の非取消エントリに取り消し線を付ける
                     strikethroughLastEntry();
                     showSearchFeedback(`Undo: ${last.description}`);
                     updateSaveBtn();
@@ -1051,15 +1010,8 @@
             }
         }
 
-        /**
-         * 取り消しを戻す (Ctrl+Shift+Z / Ctrl+Y)
-         * 最後の取り消し線エントリの線を解除し、バイナリを再適用
-         */
         async function redoLast() {
-            if (redoStack.length === 0) {
-                showSearchFeedback('Redo する操作がありません', 'warning');
-                return;
-            }
+            if (redoStack.length === 0) { showSearchFeedback('Redo する操作がありません', 'warning'); return; }
             const last = redoStack.pop();
             try {
                 const res = await fetch('/api/write', {
@@ -1069,11 +1021,9 @@
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    // undoスタックに戻す
                     undoStack.push({ offset: last.offset, original: data.original, description: last.description });
                     await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
                     if (currentHighlight) updateVisibleHighlights();
-                    // 履歴の最後の取り消し線を解除
                     unstrikethroughLastEntry();
                     showSearchFeedback(`Redo: ${last.description}`);
                     updateSaveBtn();
@@ -1086,19 +1036,7 @@
 
         // -------------------------------------------------------------------
         // 操作履歴パネル
-        //   新エントリは下に追加 (下→上に流れる)
-        //   Undo: 最後の非取消エントリに .undone
-        //   Redo: 最後の .undone を解除
-        //   新操作: .undone エントリを全削除
         // -------------------------------------------------------------------
-
-        /**
-         * 履歴パネルにエントリを下に追加し自動スクロール
-         * @param {string} action - 'DEL' | 'WRITE' | 'UNDO'
-         * @param {number} offset
-         * @param {number} length
-         * @param {number} lineNum - シート行番号 (-1 = なし)
-         */
         function addHistoryEntry(action, offset, length, lineNum) {
             const list = document.getElementById('history-list');
             const countSpan = document.getElementById('history-count');
@@ -1109,95 +1047,78 @@
             const lineStr = lineNum > 0 ? `<span class="h-line">L${lineNum}</span> ` : '';
             const actionClass = action === 'DEL' ? 'del' : '';
             const addr = `0x${offset.toString(16).toUpperCase().padStart(8, '0')}`;
-            const unsavedLabel = (undoStack.length !== savedStackLength) ? '<span class="h-unsaved">unsaved</span>' : '';
-            entry.innerHTML = `${lineStr}<span class="h-action ${actionClass}">${action}</span> <span class="h-addr">${addr}</span> (${length}B) <span class="h-time">${time}</span>${unsavedLabel}`;
+            const unsavedLabel = undoStack.length !== savedStackLength
+                ? `<span class="h-unsaved">unsaved</span>` : '';
+            entry.innerHTML = `${lineStr}<span class="h-action ${actionClass}">${action}</span> <span class="h-addr">${addr}</span> ${length}B <span class="h-time">${time}</span>${unsavedLabel}`;
             entry.addEventListener('click', () => goToAddress(offset));
-            list.appendChild(entry);  // 下に追加
-            list.scrollTop = list.scrollHeight;  // 自動スクロール
-            countSpan.textContent = `(${list.children.length})`;
+            list.appendChild(entry);
+            list.scrollTop = list.scrollHeight;
+            countSpan.textContent = list.children.length;
         }
 
-        /** 履歴の最後の非取消エントリに取り消し線を付ける */
         function strikethroughLastEntry() {
             const list = document.getElementById('history-list');
             const entries = list.querySelectorAll('.history-entry:not(.undone)');
-            if (entries.length > 0) {
-                const entry = entries[entries.length - 1];
-                entry.classList.add('undone');
-                // unsaved ラベルを追加（dirty状態の場合）
-                if (undoStack.length !== savedStackLength || redoStack.length > 0) {
-                    // 既存のsaved/unsavedラベルを削除
-                    const existing = entry.querySelector('.h-saved, .h-unsaved');
-                    if (existing) existing.remove();
-                    const label = document.createElement('span');
-                    label.className = 'h-unsaved';
-                    label.textContent = 'unsaved';
-                    entry.appendChild(label);
-                }
-            }
+            if (entries.length === 0) return;
+            const entry = entries[entries.length - 1];
+            entry.classList.add('undone');
+            const existing = entry.querySelector('.h-saved, .h-unsaved');
+            if (existing) existing.remove();
+            const label = document.createElement('span');
+            label.className = 'h-unsaved';
+            label.textContent = 'unsaved';
+            entry.appendChild(label);
             updateHistoryCount();
         }
 
-        /** 履歴の最後の取り消し線エントリの線を解除 */
         function unstrikethroughLastEntry() {
             const list = document.getElementById('history-list');
             const undone = list.querySelectorAll('.history-entry.undone');
-            if (undone.length > 0) {
-                const entry = undone[undone.length - 1];
-                entry.classList.remove('undone');
-                // unsavedラベルを削除
-                const label = entry.querySelector('.h-unsaved');
-                if (label) label.remove();
-            }
+            if (undone.length === 0) return;
+            const entry = undone[undone.length - 1];
+            entry.classList.remove('undone');
+            const label = entry.querySelector('.h-unsaved');
+            if (label) label.remove();
             updateHistoryCount();
         }
 
-        /** 取り消し線付きエントリを全削除 (新操作時に呼ぶ) */
         function clearUndoneHistoryEntries() {
             const list = document.getElementById('history-list');
-            const undone = list.querySelectorAll('.history-entry.undone');
-            undone.forEach(el => el.remove());
+            list.querySelectorAll('.history-entry.undone').forEach(el => el.remove());
             updateHistoryCount();
         }
 
-        /** 履歴件数表示を更新 */
         function updateHistoryCount() {
             const list = document.getElementById('history-list');
             const countSpan = document.getElementById('history-count');
             const active = list.querySelectorAll('.history-entry:not(.undone)').length;
             const total = list.children.length;
-            countSpan.textContent = active < total ? `(${active}/${total})` : `(${total})`;
+            countSpan.textContent = active < total ? `${active}/${total}` : total;
         }
 
-        /** 保存時: 全save/unsavedラベルをクリアし、最後の非取消エントリにsavedマーク */
         function markHistorySaved() {
             const list = document.getElementById('history-list');
-            // 既存のsaved/unsavedラベルを全削除
             list.querySelectorAll('.h-saved, .h-unsaved').forEach(el => el.remove());
-            // 最後の非取消エントリにsavedマーク
             const entries = list.querySelectorAll('.history-entry:not(.undone)');
-            if (entries.length > 0) {
-                const label = document.createElement('span');
-                label.className = 'h-saved';
-                label.textContent = 'saved';
-                entries[entries.length - 1].appendChild(label);
-            }
+            if (entries.length === 0) return;
+            const label = document.createElement('span');
+            label.className = 'h-saved';
+            label.textContent = 'saved';
+            entries[entries.length - 1].appendChild(label);
         }
-        // -------------------------------------------------------------------
-        // コントロール初期化
-        //   ミニマップ、ダンプスクロール、検索窓、DEL/Ctrl+Z/編集ボタン
-        // -------------------------------------------------------------------
 
+        // -------------------------------------------------------------------
+        // イベント設定
+        // -------------------------------------------------------------------
         function setupControls() {
             const container = document.getElementById('minimap-container');
             const wrapper = document.querySelector('.minimap-wrapper');
             const dumpContainer = document.getElementById('panel-top');
             const searchInput = document.getElementById('search-input');
 
-            // ミニマップ操作
             if (container) {
                 container.addEventListener('scroll', onMinimapScroll);
-                container.addEventListener('keydown', (e) => {
+                container.addEventListener('keydown', e => {
                     switch (e.key) {
                         case 'ArrowUp': e.preventDefault(); container.scrollTop -= 1; break;
                         case 'ArrowDown': e.preventDefault(); container.scrollTop += 1; break;
@@ -1210,14 +1131,14 @@
                 container.addEventListener('focus', () => wrapper.classList.add('focused'));
                 container.addEventListener('blur', () => wrapper.classList.remove('focused'));
             }
-            // ダンプスクロール（遅延読み込み）
+
             if (dumpContainer) {
                 dumpContainer.addEventListener('scroll', onDumpScroll);
                 dumpContainer.addEventListener('mouseenter', loadCurrentBlockFull);
             }
-            // 検索窓: Ctrl+Enter=次, Ctrl+Shift+Enter=前 (循環)
+
             if (searchInput) {
-                searchInput.addEventListener('keydown', (e) => {
+                searchInput.addEventListener('keydown', e => {
                     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                         e.preventDefault();
                         executeSearch(e.shiftKey ? -1 : 1);
@@ -1225,32 +1146,25 @@
                 });
                 searchInput.addEventListener('input', updateEditButtonState);
             }
-            // 編集ボタン: クリックで検索窓テキストを書き込み
+
             const editBtn = document.getElementById('edit-button');
-            if (editBtn) {
-                editBtn.addEventListener('click', writeFromSearchBox);
-            }
-            // グローバルキーバインド: Delete=0x20埋め, Ctrl+Z=undo, Ctrl+Shift+Z/Ctrl+Y=redo
-            document.addEventListener('keydown', (e) => {
+            if (editBtn) editBtn.addEventListener('click', writeFromSearchBox);
+
+            document.addEventListener('keydown', e => {
                 const inSearch = document.activeElement?.id === 'search-input';
-                // Delete キー (検索窓にフォーカスがある場合は通常動作)
                 if (e.key === 'Delete' && !inSearch) {
-                    e.preventDefault();
-                    deleteSelection();
+                    e.preventDefault(); deleteSelection(); return;
                 }
-                // Ctrl+Shift+Z or Ctrl+Y → Redo
-                if (!inSearch && ((e.key.toLowerCase() === 'z' && e.ctrlKey && e.shiftKey) || (e.key.toLowerCase() === 'y' && e.ctrlKey))) {
-                    e.preventDefault();
-                    redoLast();
-                    return;
+                if (!inSearch && ((e.key.toLowerCase() === 'z' && e.ctrlKey && e.shiftKey) ||
+                    (e.key.toLowerCase() === 'y' && e.ctrlKey))) {
+                    e.preventDefault(); redoLast(); return;
                 }
-                // Ctrl+Z → Undo
                 if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !inSearch) {
-                    e.preventDefault();
-                    undoLast();
+                    e.preventDefault(); undoLast();
                 }
             });
-            window.addEventListener('resize', () => drawMinimap());
+
+            window.addEventListener('resize', drawMinimap);
             updateEditButtonState();
         }
 
@@ -1262,10 +1176,12 @@
                 if (data.block_size) CHUNK_SIZE = data.block_size;
                 if (data.max_density) maxW = data.max_density;
                 drawMinimap();
-            } catch (err) { console.error('Failed to load density:', err); }
+            } catch (err) {
+                console.error("Failed to load density:", err);
+            }
         }
 
-        function highlightRange(startAddr, length, color = DEFAULT_HIGHLIGHT_COLOR) {
+        function highlightRange(startAddr, length, color = HIGHLIGHT_COLOR) {
             currentHighlight = { startAddr, length, color };
             updateVisibleHighlights();
             updateEditButtonState();
@@ -1275,11 +1191,9 @@
         function updateVisibleHighlights() {
             const dumpContainer = document.getElementById('dump-binary');
             if (!dumpContainer) return;
-
             const colAddr = dumpContainer.querySelector('.col-addr');
             const colHex = dumpContainer.querySelector('.col-hex');
             const colAscii = dumpContainer.querySelector('.col-ascii');
-
             if (!colAddr || !colHex || !colAscii) return;
 
             const addrCells = colAddr.querySelectorAll('.dump-cell');
@@ -1288,20 +1202,16 @@
 
             addrCells.forEach((addrCell, idx) => {
                 const lineAddr = parseInt(addrCell.textContent, 16);
-                
                 if (hexCells[idx]) {
-                    const hexSpans = hexCells[idx].querySelectorAll('span');
-                    hexSpans.forEach((sp, i) => {
-                        const currentAddr = lineAddr + i;
-                        sp.style.background = isHighlighted(currentAddr) || (isDictionaryMatch(currentAddr) ? 'rgba(165, 255, 0, 0.07)' : '');
+                    hexCells[idx].querySelectorAll('span').forEach((sp, i) => {
+                        const addr = lineAddr + i;
+                        sp.style.background = isHighlighted(addr) || (isDictionaryMatch(addr) ? 'rgba(165,255,0,0.07)' : '');
                     });
                 }
-                
                 if (asciiCells[idx]) {
-                    const asciiSpans = asciiCells[idx].querySelectorAll('span');
-                    asciiSpans.forEach((sp, i) => {
-                        const currentAddr = lineAddr + i;
-                        sp.style.background = isHighlighted(currentAddr) || (isDictionaryMatch(currentAddr) ? 'rgba(165, 255, 0, 0.07)' : '');
+                    asciiCells[idx].querySelectorAll('span').forEach((sp, i) => {
+                        const addr = lineAddr + i;
+                        sp.style.background = isHighlighted(addr) || (isDictionaryMatch(addr) ? 'rgba(165,255,0,0.07)' : '');
                     });
                 }
             });
@@ -1309,7 +1219,9 @@
 
         function isHighlighted(byteAddr) {
             if (!currentHighlight) return null;
-            return (byteAddr >= currentHighlight.startAddr && byteAddr < currentHighlight.startAddr + currentHighlight.length) ? currentHighlight.color : null;
+            return (byteAddr >= currentHighlight.startAddr &&
+                byteAddr < currentHighlight.startAddr + currentHighlight.length)
+                ? currentHighlight.color : null;
         }
 
         function isDictionaryMatch(byteAddr) {
@@ -1326,9 +1238,9 @@
             const blockIndex = Math.floor(addr / CHUNK_SIZE);
             currentBlockIndex = blockIndex;
             scrollToBlock(blockIndex);
-            const partStart = Math.floor((addr % CHUNK_SIZE) / PART_SIZE) * PART_SIZE;
-            let loadOffset = (blockIndex * CHUNK_SIZE) + partStart;
-            let loadSize = (loadOffset + PART_SIZE <= addr + 256) ? PART_SIZE * 2 : PART_SIZE;
+            // 修正: loadOffset は addr を PART_SIZE 境界に切り捨てたアドレス
+            const loadOffset = Math.floor(addr / PART_SIZE) * PART_SIZE;
+            const loadSize = PART_SIZE * 2;
             await loadBinaryDump(loadOffset, loadSize, false);
             scrollToAddressInView(addr, loadedStartOffset);
         }
@@ -1336,13 +1248,10 @@
         function scrollToAddressInView(addr, baseOffset = null) {
             if (baseOffset === null) baseOffset = loadedStartOffset;
             const lineIndex = Math.floor((addr - baseOffset) / 16);
-            
-            const colAddr = document.getElementById('dump-binary').querySelector('.col-addr');
+            const colAddr = document.getElementById('dump-binary')?.querySelector('.col-addr');
             if (colAddr) {
                 const addrCells = colAddr.querySelectorAll('.dump-cell');
-                if (addrCells[lineIndex]) {
-                    addrCells[lineIndex].scrollIntoView({ behavior: 'auto', block: 'center' });
-                }
+                if (addrCells[lineIndex]) addrCells[lineIndex].scrollIntoView({ behavior: 'auto', block: 'center' });
             }
         }
 
@@ -1350,105 +1259,92 @@
             if (isLoading) return 0;
             isLoading = true;
             currentAbortController = new AbortController();
+
             try {
                 const res = await fetch(`/api/dump/${offset}/${size}`, { signal: currentAbortController.signal });
                 const data = await res.json();
-                
                 const container = document.getElementById('dump-binary');
-                
-                // Ensure columns exist
+
                 let colAddr = container.querySelector('.col-addr');
                 let colHex = container.querySelector('.col-hex');
                 let colAscii = container.querySelector('.col-ascii');
-                
                 if (!colAddr) {
                     container.innerHTML = '';
-                    colAddr = document.createElement('div'); colAddr.className = 'col-addr';
-                    colHex = document.createElement('div'); colHex.className = 'col-hex';
-                    colAscii = document.createElement('div'); colAscii.className = 'col-ascii';
-                    container.appendChild(colAddr);
-                    container.appendChild(colHex);
-                    container.appendChild(colAscii);
+                    colAddr = Object.assign(document.createElement('div'), { className: 'col-addr' });
+                    colHex = Object.assign(document.createElement('div'), { className: 'col-hex' });
+                    colAscii = Object.assign(document.createElement('div'), { className: 'col-ascii' });
+                    container.append(colAddr, colHex, colAscii);
                 }
 
                 if (!append) {
-                    colAddr.innerHTML = '';
-                    colHex.innerHTML = '';
-                    colAscii.innerHTML = '';
+                    colAddr.innerHTML = colHex.innerHTML = colAscii.innerHTML = '';
                     container.classList.remove('loading');
                     loadedStartOffset = offset;
-                    loadedEndOffset = offset;
                     currentDictionaryMatches = [];
                 }
-                
                 if (data.matches) currentDictionaryMatches = currentDictionaryMatches.concat(data.matches);
 
                 data.lines.forEach(line => {
                     const lineAddr = parseInt(line.addr, 16);
-                    
-                    // 1. Address Cell
-                    const addrDiv = document.createElement('div');
-                    addrDiv.className = 'dump-cell';
-                    addrDiv.textContent = line.addr;
+
+                    // Address
+                    const addrDiv = Object.assign(document.createElement('div'), { className: 'dump-cell', textContent: line.addr });
                     colAddr.appendChild(addrDiv);
-                    
-                    // 2. Hex Cell
+
+                    // Hex
                     const hexDiv = document.createElement('div');
                     hexDiv.className = 'dump-cell';
                     line.hex.split(' ').forEach((hex, i) => {
-                        const byteSpan = document.createElement('span');
-                        byteSpan.textContent = hex;
+                        const sp = document.createElement('span');
+                        sp.textContent = hex;
                         const charAddr = lineAddr + i;
                         const hl = isHighlighted(charAddr);
-                        if (hl) byteSpan.style.background = hl;
-                        else if (isDictionaryMatch(charAddr)) byteSpan.style.background = 'rgba(165, 255, 0, 0.07)';
-                        hexDiv.appendChild(byteSpan);
+                        if (hl) sp.style.background = hl;
+                        else if (isDictionaryMatch(charAddr)) sp.style.background = 'rgba(165,255,0,0.07)';
+                        hexDiv.appendChild(sp);
                         if (i < 15) hexDiv.appendChild(document.createTextNode(' '));
                     });
                     colHex.appendChild(hexDiv);
-                    
-                    // 3. ASCII Cell
+
+                    // ASCII
                     const asciiDiv = document.createElement('div');
                     asciiDiv.className = 'dump-cell';
-                    
-
-
                     const hexBytes = line.hex.split(' ');
-                    [...line.ascii].forEach((char, i) => {
-                        const charSpan = document.createElement('span');
-                        charSpan.textContent = char;
+                    line.ascii.split('').forEach((char, i) => {
+                        const sp = document.createElement('span');
+                        sp.textContent = char;
                         const charAddr = lineAddr + i;
                         const hl = isHighlighted(charAddr);
-                        if (hl) charSpan.style.background = hl; 
-                        else if (isDictionaryMatch(charAddr)) charSpan.style.background = 'rgba(165, 255, 0, 0.07)';
-                        // 実際のピリオド (0x2E) を黄色で強調
-                        if (hexBytes[i] === '2E') charSpan.style.color = '#dcdcaa';
-                        asciiDiv.appendChild(charSpan);
+                        if (hl) sp.style.background = hl;
+                        else if (isDictionaryMatch(charAddr)) sp.style.background = 'rgba(165,255,0,0.07)';
+                        if (hexBytes[i] === '2E') sp.style.color = '#dcdcaa';
+                        asciiDiv.appendChild(sp);
                     });
                     colAscii.appendChild(asciiDiv);
                 });
 
                 totalBinarySize = data.total_size;
-                loadedEndOffset = offset + (data.lines.length * 16);
-                isPartialLoaded = (loadedEndOffset - loadedStartOffset < CHUNK_SIZE);
+                loadedEndOffset = offset + data.lines.length * 16;
+                isPartialLoaded = (loadedEndOffset - loadedStartOffset) < CHUNK_SIZE;
                 updateOffsetDisplay(loadedStartOffset);
-                
                 if (!append && lastTargetAddress !== null) scrollToAddressInView(lastTargetAddress);
-                
                 isLoading = false;
                 return data.total_size;
-
             } catch (err) {
                 isLoading = false;
-                console.error(err);
+                if (err.name !== 'AbortError') console.error(err);
                 return 0;
             }
         }
 
+
         function updateOffsetDisplay(offset) {
-            const pct = ((offset / totalBinarySize) * 100).toFixed(1);
+            const pct = (offset / totalBinarySize * 100).toFixed(1);
             const currentW = densityData[currentBlockIndex]?.w || 0;
-            document.getElementById('offset-display').textContent = `0x${offset.toString(16).toUpperCase().padStart(8, '0')} - 0x${loadedEndOffset.toString(16).toUpperCase().padStart(8, '0')} | Block ${currentBlockIndex}/${densityData.length} (${pct}%) | Density: ${currentW}`;
+            document.getElementById('offset-display').textContent =
+                `0x${offset.toString(16).toUpperCase().padStart(8, '0')} - ` +
+                `0x${loadedEndOffset.toString(16).toUpperCase().padStart(8, '0')} ` +
+                `Block ${currentBlockIndex}/${densityData.length} ${pct}% Density:${currentW}`;
         }
 
         async function loadSheet() {
@@ -1457,73 +1353,63 @@
                 const data = await res.json();
                 const container = document.getElementById('sheet-content');
 
-                // Update Filename
-                const sheetFilename = data.filename || 'system_prompts_full.md';
+                const sheetFilename = data.filename || 'system_prompts.md';
                 const header = document.getElementById('sheet-header-title');
                 if (header) header.textContent = `Sheet: ${sheetFilename}`;
 
-                if (data.lines) {
-                    container.innerHTML = '';
-                    data.lines.forEach((line, idx) => {
-                        const div = document.createElement('div');
-                        div.className = 'sheet-line';
-                        div.onclick = () => {
-                            const input = document.getElementById('search-input');
-                            input.value = line.trim();
-                            executeSearch();
-                        };
-                        const num = document.createElement('span'); num.className = 'line-num'; num.textContent = idx + 1;
-                        const text = document.createElement('span'); text.className = 'line-text'; text.textContent = line;
-                        div.appendChild(num); div.appendChild(text); container.appendChild(div);
-                    });
-                    return data.lines.length;
-                }
-                return 0;
+                if (!data.lines) return 0;
+                container.innerHTML = '';
+
+                data.lines.forEach((line, idx) => {
+                    const div = document.createElement('div');
+                    const hasNonAscii = /[^\u0000-\u007F]/.test(line);
+                    div.className = hasNonAscii ? 'sheet-line non-ascii' : 'sheet-line';
+
+                    div.onclick = e => {
+                        if (hasNonAscii) return;
+                        const input = document.getElementById('search-input');
+                        input.value = line.trim();
+                        executeSearch();
+                    };
+
+                    const num = Object.assign(document.createElement('span'), { className: 'line-num', textContent: idx + 1 });
+                    const text = Object.assign(document.createElement('span'), { className: 'line-text', textContent: line });
+                    div.append(num, text);
+                    container.appendChild(div);
+                });
+                return data.lines.length;
             } catch (e) {
                 console.error(e);
                 return 0;
             }
         }
 
-        // -------------------------------------------------------------------
-        // 辞書パネル・リロード・ファイル情報
-        // -------------------------------------------------------------------
-
         async function loadFileInfo() {
             try {
                 const res = await fetch('/api/info');
                 const data = await res.json();
-                const binaryFilenameSpan = document.getElementById('binary-filename');
-
-                binaryFilenameSpan.textContent = `Binary: ${data.filename || '(none)'}`;
-                // The span itself is now clickable and styled, so no need to manage a separate button's display
-                // Also, no longer need to check for '(none)' to display a button, as the filename text itself is the button.
+                document.getElementById('binary-filename').textContent = `Binary: ${data.filename || 'none'}`;
             } catch (err) {
-                console.error('loadFileInfo:', err);
-                const binaryFilenameSpan = document.getElementById('binary-filename'); // Re-get if needed for error display
-                binaryFilenameSpan.textContent = 'Binary: (Error loading file info)'; // Display error message
-                // Ensure it's still clickable even on error
+                console.error('loadFileInfo', err);
+                document.getElementById('binary-filename').textContent = 'Binary: Error';
             }
         }
 
         async function selectBinaryFile() {
-            console.log('selectBinaryFile: function called!'); // DEBUG
             const filenameSpan = document.getElementById('binary-filename');
-            filenameSpan.textContent = '...'; // Indicate loading
-
+            filenameSpan.textContent = 'Binary: (selecting...)';
             try {
                 const res = await fetch('/api/select-binary', { method: 'POST' });
                 const data = await res.json();
                 if (data.ok) {
                     showSearchFeedback(`Binary loaded: ${data.filename}`, 'info');
-                    location.reload();
                 } else {
                     showSearchFeedback(`Failed to select binary: ${data.error}`, 'error');
-                    location.reload(); // Reload anyway to reset UI
                 }
+                location.reload();
             } catch (err) {
                 showSearchFeedback(`Error: ${err.message}`, 'error');
-                location.reload(); // Reload anyway to reset UI
+                location.reload();
             }
         }
 
@@ -1532,20 +1418,18 @@
                 const res = await fetch('/api/prompt-words');
                 const data = await res.json();
                 const ta = document.getElementById('dict-textarea');
-                // 空行を先頭に入れ、1語1行で表示
-                ta.value = '\n' + (data.words || []).join('\n');
-            } catch (err) { console.error('loadDictWords:', err); }
+                ta.value = data.words.join('\n');
+            } catch (err) {
+                console.error('loadDictWords', err);
+            }
         }
 
         function getDictWordsFromUI() {
-            const ta = document.getElementById('dict-textarea');
-            // テキストエリアの内容から単語一覧を抽出（空行は除去しない、先頭の区切り空行のみ除去）
-            const lines = ta.value.split('\n');
-            // 先頭の空行をスキップし、実単語行のみ返す
+            const lines = document.getElementById('dict-textarea').value.split('\n');
             const words = [];
             let started = false;
             for (const line of lines) {
-                if (!started && line.trim() === '') continue;
+                if (!started && !line.trim()) continue;
                 started = true;
                 words.push(line);
             }
@@ -1561,10 +1445,10 @@
                     body: JSON.stringify({ words }),
                 });
                 const data = await res.json();
-                if (data.ok) {
-                    console.log(`Saved ${data.count} prompt words`);
-                }
-            } catch (err) { console.error('saveDictWords:', err); }
+                if (data.ok) console.log(`Saved ${data.count} prompt words`);
+            } catch (err) {
+                console.error('saveDictWords', err);
+            }
         }
 
         async function reloadServer() {
@@ -1572,33 +1456,22 @@
             btn.textContent = 'Reloading...';
             btn.disabled = true;
             try {
-                // まず辞書を保存
                 await saveDictWords();
-                // サーバーリロード
                 const res = await fetch('/api/reload', { method: 'POST' });
                 const data = await res.json();
                 if (data.ok) {
-                    document.getElementById('binary-filename').textContent = `Binary: ${data.filename || '(none)'}`;
-                    // 密度データとミニマップを再取得
+                    document.getElementById('binary-filename').textContent = `Binary: ${data.filename || 'none'}`;
                     await loadDensity();
-                    // 現在位置のバイナリダンプを再読み込み
                     await loadBinaryDump(currentBlockIndex * CHUNK_SIZE, PART_SIZE);
-                    showSearchFeedback(`Reload complete: ${data.density_blocks} blocks, maxW=${data.max_density}`, 'info');
-
-                    // 成功したら dirty 解除
+                    showSearchFeedback(`Reload complete: ${data.density_blocks} blocks, maxW:${data.max_density}`, 'info');
                     btn.classList.remove('dirty');
-                    // バイナリが再読み込みされたので undo/redo をリセット
-                    undoStack = [];
-                    redoStack = [];
-                    savedStackLength = 0;
+                    undoStack = []; redoStack = []; savedStackLength = 0;
                     updateSaveBtn();
-                    // 履歴のsaved/unsavedマークをクリア
-                    const histList = document.getElementById('history-list');
-                    histList.querySelectorAll('.h-saved, .h-unsaved').forEach(el => el.remove());
+                    document.getElementById('history-list').querySelectorAll('.h-saved, .h-unsaved').forEach(el => el.remove());
                 }
             } catch (err) {
-                console.error('reloadServer:', err);
-                showSearchFeedback('Reload failed: ' + err.message, 'error');
+                console.error('reloadServer', err);
+                showSearchFeedback(`Reload failed: ${err.message}`, 'error');
             } finally {
                 btn.textContent = 'Server Reload';
                 btn.disabled = false;
@@ -1608,193 +1481,172 @@
         async function init() {
             setupControls();
 
-
-            // Custom Copy Handler: Remove newlines for continuous binary/ascii stream
-            document.addEventListener('copy', (e) => {
+            // カスタムコピーハンドラ (Hex/ASCII列の改行除去)
+            document.addEventListener('copy', e => {
                 const selection = window.getSelection();
                 if (selection.isCollapsed) return;
-
-                // Helper: Check if node is inside target columns
-                const isTargetCol = (node) => {
+                const isTargetCol = node => {
                     if (!node) return false;
                     const elem = node.nodeType === 1 ? node : node.parentElement;
                     return elem && (elem.closest('.col-hex') || elem.closest('.col-ascii'));
                 };
-
-                // Check start/end of selection
-                // Check if Hex column
                 const getClosest = (n, sel) => {
                     if (!n) return null;
                     const el = n.nodeType === 1 ? n : n.parentElement;
                     return el && el.closest(sel);
                 };
-                const isHex = getClosest(selection.anchorNode, '.col-hex') || getClosest(selection.focusNode, '.col-hex');
-
-                if (isTargetCol(selection.anchorNode) || isTargetCol(selection.focusNode)) {
+                const isHex = getClosest(selection.anchorNode, '.col-hex') &&
+                    getClosest(selection.focusNode, '.col-hex');
+                if (isTargetCol(selection.anchorNode) && isTargetCol(selection.focusNode)) {
                     let text = selection.toString();
-                    // Hex: space, ASCII: empty (join)
-                    text = text.replace(/[\r\n]+/g, isHex ? ' ' : '');
+                    text = text.replace(/\n/g, isHex ? ' ' : '');
                     e.clipboardData.setData('text/plain', text);
                     e.preventDefault();
                 }
             });
-            // Load binary data first
-            const [binarySize, _] = await Promise.all([loadBinaryDump(0, PART_SIZE), loadSheet(), loadDensity()]);
+
+            const [binarySize] = await Promise.all([loadBinaryDump(0, PART_SIZE), loadSheet(), loadDensity()]);
             await loadFileInfo();
             await loadDictWords();
 
-            // Setup UI
+            // 辞書オーバーレイ同期
             const dictTextarea = document.getElementById('dict-textarea');
             const dictOverlay = document.getElementById('dict-overlay');
             const reloadBtn = document.querySelector('.reload-btn');
 
-            // Overlay Sync Logic
             if (dictTextarea && dictOverlay) {
                 const updateOverlay = () => {
                     let text = dictTextarea.value;
-                    // HTML Escape
                     text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    // Visualize Spaces (Dark Yellow Background)
                     text = text.replace(/ /g, '<span class="space-mark"> </span>');
-                    // Handle trailing newline
                     if (text.endsWith('\n')) text += '<br>';
-
                     dictOverlay.innerHTML = text;
                 };
-
                 dictTextarea.addEventListener('input', () => {
                     if (reloadBtn) { reloadBtn.classList.add('dirty'); reloadBtn.textContent = 'Save & Reload'; }
                     updateOverlay();
                 });
-
-                // Sync Scroll
                 const syncScroll = () => {
                     dictOverlay.scrollTop = dictTextarea.scrollTop;
                     dictOverlay.scrollLeft = dictTextarea.scrollLeft;
                 };
                 dictTextarea.addEventListener('scroll', syncScroll);
-                // Sync Resize
                 new ResizeObserver(syncScroll).observe(dictTextarea);
-
-                // Initial State
                 updateOverlay();
-
-                // --- Sheet Controls ---
-                const sheetInput = document.getElementById('sheet-file-input');
-                const loadBtn = document.getElementById('btn-sheet-load');
-                const pasteBtn = document.getElementById('btn-sheet-paste');
-
-                async function submitSheetUpdate(content) {
-                    try {
-                        const res = await fetch('/api/sheet', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ content: content })
-                        });
-                        const data = await res.json();
-                        if (data.ok) {
-                            const fb = document.getElementById('search-feedback');
-                            if (fb) { fb.textContent = `Updated: ${data.filename}`; fb.style.display = 'block'; setTimeout(() => fb.style.display = 'none', 3000); }
-                            await loadSheet();
-                            return data.filename;
-                        } else {
-                            alert(`Error: ${data.error}`);
-                        }
-                    } catch (e) {
-                        console.error('Update failed', e);
-                        alert('Network Error');
-                    }
-                    return null;
-                }
-
-                if (loadBtn && sheetInput) {
-                    loadBtn.addEventListener('click', () => sheetInput.click());
-                    sheetInput.addEventListener('change', (e) => {
-                        const file = e.target.files[0];
-                        if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = async (ev) => {
-                            if (confirm(`Load content from ${file.name}?`)) {
-                                const newName = await submitSheetUpdate(ev.target.result);
-                                if (newName) {
-                                    loadBtn.textContent = newName;
-                                    loadBtn.style.color = '#fff';
-                                }
-                            }
-                        };
-                        reader.readAsText(file);
-                        sheetInput.value = '';
-                    });
-                }
-
-                if (pasteBtn) {
-                    pasteBtn.addEventListener('click', async () => {
-                        try {
-                            const text = await navigator.clipboard.readText();
-                            if (text && confirm('Import from clipboard?')) {
-                                const newName = await submitSheetUpdate(text);
-                                if (newName) {
-                                    loadBtn.textContent = newName;
-                                    loadBtn.style.color = '#fff';
-                                }
-                            }
-                        } catch (err) {
-                            alert('Clipboard access failed');
-                        }
-                    });
-                }
             }
 
-            document.getElementById('status-text').textContent = `Binary: ${(binarySize / (1024 * 1024)).toFixed(2)} MB | Cursor ↑↓: 1block | PgUp/Dn: 4blocks`;
+            // シートコントロール
+            const sheetInput = document.getElementById('sheet-file-input');
+            const loadBtn = document.getElementById('btn-sheet-load');
+            const pasteBtn = document.getElementById('btn-sheet-paste');
 
-            // --- Save Binary ---
-            window.saveBinary = async function() {
-                if (!confirm('現在の状態をファイルに上書き保存しますか？\n(.bakファイルが作成されます)')) return;
-
-                const btn = document.getElementById('save-binary-btn');
-                if (btn) {
-                    btn.disabled = true;
-                    btn.innerText = 'Saving...';
-                }
-
+            async function submitSheetUpdate(content, filename = null, isPaste = false) {
                 try {
-                    // 5秒でタイムアウト
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-                    const res = await fetch('/api/save-binary', { 
+                    const res = await fetch('/api/sheet', {
                         method: 'POST',
-                        signal: controller.signal
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content, filename, is_paste: isPaste }),
                     });
-                    clearTimeout(timeoutId);
-                    
                     const data = await res.json();
-                    
                     if (data.ok) {
-                        // savedStackLength を更新して clean 状態に
-                        savedStackLength = undoStack.length;
-                        updateSaveBtn();
-                        // 履歴に saved マークを付ける
-                        markHistorySaved();
-                        alert(`保存しました。\nPath: ${data.path}`);
+                        const fb = document.getElementById('search-feedback');
+                        if (fb) { fb.textContent = `Updated: ${data.filename}`; fb.style.display = 'block'; setTimeout(() => fb.style.display = 'none', 3000); }
+                        await loadSheet();
+                        return data.filename;
                     } else {
-                        alert(`保存エラー: ${data.error}\n(ファイルが使用中の可能性があります)`);
+                        alert(`Error: ${data.error}`);
                     }
-                } catch (err) {
-                    console.error(err);
-                    if (err.name === 'AbortError') {
-                        alert('タイムアウトしました。\nファイルがロックされているか、サーバーが重いです。\n(現在実行中の可能性があります)');
+                } catch (e) {
+                    console.error('Update failed', e);
+                    alert('Network Error');
+                }
+                return null;
+            }
+
+            if (loadBtn && sheetInput) {
+                loadBtn.addEventListener('click', () => sheetInput.click());
+                sheetInput.addEventListener('change', e => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = async ev => {
+                        if (confirm(`Load content from ${file.name}?`)) {
+                            const newName = await submitSheetUpdate(ev.target.result, file.name, false);
+                            if (newName) { loadBtn.textContent = newName; loadBtn.style.color = '#fff'; }
+                        }
+                    };
+                    reader.readAsText(file);
+                    sheetInput.value = '';
+                });
+            }
+
+            if (pasteBtn) {
+                pasteBtn.addEventListener('click', async () => {
+                    try {
+                        const text = await navigator.clipboard.readText();
+                        if (text && confirm('Import from clipboard?')) {
+                            const newName = await submitSheetUpdate(text, null, true);
+                            if (newName) { loadBtn.textContent = newName; loadBtn.style.color = '#fff'; }
+                        }
+                    } catch (err) {
+                        alert('Clipboard access failed');
+                    }
+                });
+            }
+
+            document.getElementById('status-text').textContent =
+                `Binary: ${(binarySize / 1024 / 1024).toFixed(2)} MB  Cursor: 1block  PgUp/Dn: 4blocks`;
+        }
+
+        // Save Binary
+        window.saveBinary = async function (save_as_bin = false) {
+            const confirmMsg = save_as_bin
+                ? '同じディレクトリに .bin ファイルとして保存します。続行しますか？'
+                : '上書き保存します。.bak バックアップが作成されます。続行しますか？';
+            if (!confirm(confirmMsg)) return;
+            const btn = document.getElementById('save-binary-btn');
+            if (btn) { btn.disabled = true; btn.innerText = 'Saving...'; }
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                const res = await fetch('/api/save-binary', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ save_as_bin }),
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                const data = await res.json();
+                if (data.ok) {
+                    savedStackLength = undoStack.length;
+                    updateSaveBtn();
+                    markHistorySaved();
+                    let msg = `✅ 保存完了:\n${data.path.split(/[\\/]/).pop()}`;
+                    if (data.backup) {
+                        const bakName = data.backup.split(/[\\/]/).pop();
+                        const highlighted = bakName.replace(/(\.bak-\d+)$/, '【$1】');
+                        msg += `\n\n📁 バックアップ作成:\n${highlighted}`;
+                    }
+                    alert(msg);
+                } else {
+                    if (data.error && data.error.includes('Permission denied')) {
+                        const retry = confirm(
+                            `保存失敗: ファイルが使用中です。\nゲームを終了してから保存することをお勧めします。\n\n` +
+                            `代わりに同じディレクトリに .bin ファイルとして保存しますか？`
+                        );
+                        if (retry) await saveBinary(true);
                     } else {
-                        alert('通信エラーが発生しました: ' + err);
-                    }
-                } finally {
-                    if (btn) {
-                        btn.innerText = 'Save';
-                        updateSaveBtn();
+                        alert(`Error: ${data.error}`);
                     }
                 }
-            };
-        }
+            } catch (err) {
+                console.error(err);
+                if (err.name === 'AbortError') alert('保存タイムアウト');
+                else alert(`保存エラー: ${err.message}`);
+            } finally {
+                if (btn) { btn.innerText = 'Save'; updateSaveBtn(); }
+            }
+        };
         document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>

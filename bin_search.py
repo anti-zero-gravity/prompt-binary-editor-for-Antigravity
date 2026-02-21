@@ -14,7 +14,7 @@ bin_search.py — バイナリ内ASCII文字列の検索・マッピングCLI
   python bin_search.py --map-line "The first time you read a new file..."
 
   # シート全体マッピング
-  python bin_search.py --map-sheet system_prompts_full.md
+  python bin_search.py --map-sheet system_prompts.md
 """
 
 import argparse

@@ -51,7 +51,7 @@ class Fragment:
 @dataclass
 class LineMappingResult:
     """1行のマッピング結果"""
-    line_number: int          # system_prompts_full.md の行番号
+    line_number: int          # system_prompts.md の行番号
     original_text: str        # 元のテキスト
     fragments: list[Fragment] = field(default_factory=list)
     fully_matched: bool = False  # 行全体が1つの連続文字列として見つかったか
@@ -462,7 +462,7 @@ def map_sheet(bd: BinaryData, lines: list[str],
 
     Args:
         bd: バイナリデータ
-        lines: system_prompts_full.md の各行
+        lines: system_prompts.md の各行
         min_fragment_len: 最短フラグメント長
         progress_callback: 進捗コールバック (current, total) -> None
     """
