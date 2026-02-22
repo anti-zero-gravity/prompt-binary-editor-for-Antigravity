@@ -317,6 +317,16 @@
             background: #3eb099;
         }
 
+        /* 無効状態のボタン */
+        .search-btn.disabled {
+            background: #444 !important;
+            color: #888 !important;
+            cursor: not-allowed !important;
+        }
+
+        .search-btn.disabled svg {
+            opacity: 0.5;
+        }
         .search-btn svg {
             width: 20px;
             height: 20px;
@@ -848,8 +858,19 @@
 
         async function executeSearch(direction = 1) {
             const searchInput = document.getElementById('search-input');
-            if (!searchInput) return;
+            const searchBtn = document.getElementById('search-button');
+            if (!searchInput || !searchBtn) return;
             const searchText = searchInput.value.trim();
+            
+            if (searchBtn.classList.contains('disabled')) {
+                if (searchText.includes('　')) {
+                    showSearchFeedback("エラー: 全角スペースが含まれています。", "error");
+                } else if (/[^\x00-\x7F]/.test(searchText)) {
+                    showSearchFeedback("エラー: ASCII以外の文字が含まれています。", "error");
+                }
+                return;
+            }
+
             if (!searchText) { showSearchFeedback("検索ワードを入力してください。", "warning"); return; }
 
             if (searchText === lastSearchQuery && cachedMatches.length > 0) {
@@ -908,19 +929,59 @@
         function updateEditButtonState() {
             const editBtn = document.getElementById('edit-button');
             const searchInput = document.getElementById('search-input');
-            if (!editBtn || !searchInput) return;
-            const inputLen = searchInput.value.length;
+            const searchBtn = document.getElementById('search-button');
+            if (!editBtn || !searchInput || !searchBtn) return;
+            
+            // value is NOT trimmed here because we want to detect trailing full-width spaces
+            const searchText = searchInput.value;
+            const inputLen = searchText.length;
             const highlightLen = currentHighlight ? currentHighlight.length : 0;
-            if (highlightLen > 0 && inputLen === highlightLen) {
-                editBtn.style.background = '#f39c12';
-                editBtn.style.opacity = '1';
-                editBtn.style.cursor = 'pointer';
-                editBtn.title = `編集可能 (サイズ: ${highlightLen})`;
+            
+            let hasError = false;
+            let errorMsg = '';
+            
+            if (searchText.includes('　')) {
+                hasError = true;
+                errorMsg = '全角スペースが使われています。';
+            } else if (/[^\x00-\x7F]/.test(searchText)) {
+                hasError = true;
+                errorMsg = 'ASCII以外の文字が含まれています。';
+            }
+
+            if (hasError) {
+                editBtn.classList.add('disabled');
+                editBtn.title = errorMsg;
+                
+                searchBtn.classList.add('disabled');
+                searchBtn.title = errorMsg;
+                // disabled属性を外すことでマウスイベント（ツールチップ表示）を活かす
+                searchBtn.disabled = false;
+                
+                // リアルタイムエラー表示
+                showSearchFeedback("エラー: " + errorMsg, "error");
             } else {
-                editBtn.style.background = '#444';
-                editBtn.style.opacity = '0.5';
-                editBtn.style.cursor = 'not-allowed';
-                editBtn.title = `サイズ不一致 (入力: ${inputLen} / 選択: ${highlightLen})`;
+                editBtn.classList.remove('disabled');
+                searchBtn.classList.remove('disabled');
+                searchBtn.title = '検索';
+                searchBtn.disabled = false;
+                
+                // エラー解消時に表示を消す（または元の状態に戻す処理）
+                const feedback = document.getElementById('search-feedback');
+                if (feedback && feedback.style.display === 'block' && feedback.classList.contains('error')) {
+                     feedback.style.display = 'none';
+                }
+                
+                if (highlightLen > 0 && inputLen === highlightLen) {
+                    editBtn.style.background = '#f39c12';
+                    editBtn.style.opacity = '1';
+                    editBtn.style.cursor = 'pointer';
+                    editBtn.title = `編集可能 (サイズ: ${highlightLen})`;
+                } else {
+                    editBtn.style.background = '#444';
+                    editBtn.style.opacity = '0.5';
+                    editBtn.style.cursor = 'not-allowed';
+                    editBtn.title = `サイズ不一致 (入力: ${inputLen} / 選択: ${highlightLen})`;
+                }
             }
         }
 
