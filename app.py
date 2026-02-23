@@ -325,7 +325,7 @@ def search():
     query = request.args.get("q", "")
     if not query or bd is None:
         return jsonify([])
-    hits = core.search(bd, query, max_results=100)
+    hits = core.search(bd, query.lstrip(), max_results=100)
     return jsonify([{"offset": h.offset, "length": h.length} for h in hits])
 
 
@@ -337,13 +337,13 @@ def map_line():
         return jsonify({"fragments": [], "fully_matched": False})
 
     # 完全一致を試行
-    full_hits = core.search(bd, text.strip(), max_results=2)
+    full_hits = core.search(bd, text.lstrip(), max_results=2)
     if full_hits:
         return jsonify({
             "fully_matched": True,
             "hit_count": len(full_hits),
             "fragments": [{
-                "text": text.strip(),
+                'text': text.lstrip(),
                 "offset": full_hits[0].offset,
                 "offset_hex": f"0x{full_hits[0].offset:08X}",
                 "length": full_hits[0].length,
@@ -354,7 +354,7 @@ def map_line():
         })
 
     # N-gram スライディングウィンドウで検索
-    ngram_results = core.map_line_ngram(bd, text.strip())
+    ngram_results = core.map_line_ngram(bd, text.lstrip())
     if ngram_results:
         best = ngram_results[0]
         return jsonify({

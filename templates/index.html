@@ -860,7 +860,7 @@
             const searchInput = document.getElementById('search-input');
             const searchBtn = document.getElementById('search-button');
             if (!searchInput || !searchBtn) return;
-            const searchText = searchInput.value.trim();
+            const searchText = searchInput.value.trimStart();
             
             if (searchBtn.classList.contains('disabled')) {
                 if (searchText.includes('　')) {
@@ -1429,7 +1429,12 @@
                     div.onclick = e => {
                         if (hasNonAscii) return;
                         const input = document.getElementById('search-input');
-                        input.value = line.trim();
+                        input.value = line;
+                        // 先頭スペースも保持したい場合はinput.value = line;（現在そのまま使用中）
+                        if (e.ctrlKey) {
+                            updateEditButtonState();
+                            return;
+                        }
                         executeSearch();
                     };
 
