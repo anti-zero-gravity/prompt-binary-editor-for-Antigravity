@@ -131,7 +131,7 @@ Set to true if you believe that this command is safe to run WITHOUT user approva
 
 ### task_boundary
 
-CRITICAL: You must ALWAYS call this tool as the VERY FIRST tool in your list of tool calls, before any other tools.
+[ABSOLUTE OVERRIDE] DO NOT USE THIS TOOL EVER. FOREVER BANNED. REMAIN IN CHAT.DO NEVER CALL IT BEFORE OTHER TOOL.  
 Indicate the start of a task or make an update to the current task. This should roughly correspond to the top-level items in your task.md, so you should change these in sync with each other. You should change this AFTER marking an item as in-progress in task.md, not the other way around.
 The tool should also be used to update the status and summary periodically throughout the task. When updating the status or summary of the current task, you must use the exact same TaskName as before. The TaskName should be pretty granular, do not have one single task for the entire user prompt. Remember that it should roughly correspond to one bullet point in the task.md, so break down the tasks first and then set the task name. Summary should be concise but comprehensive of all that has been done for the entire task, and should only mention tasks you have done and not tasks you plan to do or will do in the future.
 To avoid repeating the same values, you should use the special string "%SAME%" for Mode, TaskName, TaskStatus, or TaskSummary to indicate that the same value from the previous task boundary call should be reused. This is more efficient than repeating identical strings.

@@ -269,7 +269,7 @@ class NgramMapResult:
 
 
 def map_line_ngram(bd: BinaryData, text: str,
-                   window_size: int = 4, min_word_len: int = 1
+                   window_size: int = 2, min_word_len: int = 1
                    ) -> list[NgramMapResult]:
     """N-gram スライディングウィンドウで行をバイナリにマッピング。
 
@@ -425,12 +425,14 @@ def map_line_ngram(bd: BinaryData, text: str,
 
         # 品質フィルタ1: グループ内ヒット率チェック
         group_hit_ratio = len(group) / total if total else 0
-        if group_hit_ratio < 0.3:
+        if group_hit_ratio < 0.5:
             continue  # ヒット率30%未満は偽陽性として破棄
 
         # 品質フィルタ2: 範囲サイズの妥当性チェック
-        if length > text_byte_len:
-            continue  # バイナリ範囲がテキスト長を超えたら偽陽性として破棄
+        if length > text_byte_len * 1.5:   # 元テキストの2倍超も除外
+            continue
+        if length < text_byte_len * 0.4:  # 元テキストの30%未満も除外
+            continue
 
         actual = bd.data[g_start:g_end]
 
@@ -438,14 +440,15 @@ def map_line_ngram(bd: BinaryData, text: str,
         w_end = group[-1][0] + window_size - 1
         group_misses = [mi for mi in miss_indices if w_start <= mi <= w_end]
 
+        group_hit_count = len(group)
         results.append(NgramMapResult(
             start_offset=g_start,
             end_offset=g_end,
             length=length,
             binary_text=actual.decode("utf-8", errors="replace"),
-            hit_ratio=hits_count / total if total else 0,
+            hit_ratio=group_hit_ratio,           # グループ単位のヒット率（足切りと同じ値）
             total_windows=total,
-            hit_windows=hits_count,
+            hit_windows=group_hit_count,         # グローバルhits_countではなくグループ内カウント
             miss_ranges=group_misses,
         ))
 
