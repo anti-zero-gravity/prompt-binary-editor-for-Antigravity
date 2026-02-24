@@ -309,6 +309,31 @@ def update_sheet():
         print(f"Update sheet error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
+@app.route('/api/sheet-line', methods=['POST'])
+def update_sheet_line():
+    global sheet_lines, SHEET_PATH
+    data = request.json
+    if not data:
+        return jsonify(ok=False, error='no data'), 400
+    line_index = data.get('lineIndex')
+    prefix = data.get('prefix', '')
+    text_val = data.get('text')  # Undo/Redo用: 全文置き換え
+    if line_index is None or not isinstance(line_index, int):
+        return jsonify(ok=False, error='invalid lineIndex'), 400
+    if line_index < 0 or line_index >= len(sheet_lines):
+        return jsonify(ok=False, error=f'out of range ({line_index}/{len(sheet_lines)})'), 400
+    if text_val is not None:
+        sheet_lines[line_index] = text_val
+    else:
+        sheet_lines[line_index] = prefix + sheet_lines[line_index]
+    if SHEET_PATH:
+        try:
+            with open(SHEET_PATH, 'w', encoding='utf-8', newline='\n') as f:
+                f.write('\n'.join(sheet_lines))
+        except Exception as e:
+            return jsonify(ok=False, error=str(e)), 500
+    return jsonify(ok=True, lineIndex=line_index, newText=sheet_lines[line_index])
+
 
 @app.route("/api/density")
 def get_density():

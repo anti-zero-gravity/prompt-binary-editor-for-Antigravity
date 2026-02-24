@@ -586,10 +586,26 @@
             border-left-color: #f39c12 !important;
             background: #3a2e1e !important;
         }
+
+        /* ── Auto Delete Progress Bar ── */
+        #auto-delete-bar {
+            position: fixed; top: 0; left: 0; right: 0;
+            height: 3px; background: #f39c12;
+            z-index: 10000; display: none;
+            transition: width 0.25s ease;
+        }
+        .sheet-line.auto-processing {
+            outline: 2px solid #f39c12 !important;
+            background: #2a2a1a !important;
+        }
+        .sheet-line.auto-done {
+            opacity: 0.4;
+        }
     </style>
 </head>
 
 <body>
+    <div id="auto-delete-bar"></div>
     <header>
         <h1>Binary Prompt Editor</h1>
         <div class="header-right-group">
@@ -849,7 +865,9 @@
             feedback.classList.remove('error', 'warning');
             if (type !== 'info') feedback.classList.add(type);
             if (window.feedbackTimer) clearTimeout(window.feedbackTimer);
-            window.feedbackTimer = setTimeout(() => { feedback.style.display = 'none'; }, 8000);
+            if (!window._autoDeleteRunning) {
+                window.feedbackTimer = setTimeout(() => { feedback.style.display = 'none'; }, 8000);
+            }
         }
 
         let lastSearchQuery = "";
@@ -926,6 +944,278 @@
         }
         window.executeSearch = executeSearch;
 
+// ↓↓↓ ここから挿入 ↓↓↓
+
+// ═══════════════════════════════════════════════════════════════════
+//  Auto Delete All  (Shift+Del)
+// ═══════════════════════════════════════════════════════════════════
+const DELETED_PREFIX  = '【削除済み】';
+const NGRAM_PREFIX    = '【N-削除済み】';
+const AUTO_DELAY_VIEW = 0;	// 700;
+const AUTO_DELAY_NEXT = 0;//	350;
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function waitForBinaryLoad(timeout = 4000) {
+    const t0 = Date.now();
+    while (isLoading && Date.now() - t0 < timeout) await sleep(80);
+}
+
+function _highlightSheetLine(index) {
+    const els = document.querySelectorAll('#sheet-content .sheet-line');
+    els.forEach(l => l.classList.remove('auto-processing'));
+    if (els[index]) {
+        els[index].classList.add('auto-processing');
+        els[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function _clearSheetHighlight() {
+    document.querySelectorAll('#sheet-content .sheet-line.auto-processing')
+        .forEach(l => l.classList.remove('auto-processing'));
+}
+
+function _markSheetLineDone(index, newText) {
+    const els = document.querySelectorAll('#sheet-content .sheet-line');
+    if (!els[index]) return;
+    const textEl = els[index].querySelector('.line-text');
+    if (textEl) textEl.textContent = newText;
+    els[index].classList.remove('auto-processing');
+    els[index].classList.add('auto-done');
+}
+
+        // シート行の表示をテキストに合わせて更新（Undo/Redo用）
+        function _setSheetLineVisual(index, text) {
+            const els = document.querySelectorAll('#sheet-content .sheet-line');
+            if (!els[index]) return;
+            const textEl = els[index].querySelector('.line-text');
+            if (textEl) textEl.textContent = text;
+            const isDone = text.startsWith(DELETED_PREFIX) || text.startsWith(NGRAM_PREFIX);
+            els[index].classList.toggle('auto-done', isDone);
+            els[index].classList.remove('auto-processing');
+        }
+
+        async function _restoreSheetLine(lineIndex, text) {
+            try {
+                await fetch('/api/sheet-line', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lineIndex, text })
+                });
+                _setSheetLineVisual(lineIndex, text);
+            } catch (e) { console.error('_restoreSheetLine failed', e); }
+        }
+
+async function _patchSheetLine(lineIndex, prefix) {
+    try {
+        const res = await fetch('/api/sheet-line', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lineIndex, prefix })
+        });
+        return await res.json();
+    } catch (e) {
+        console.error('patchSheetLine failed', e);
+        return { ok: false };
+    }
+}
+
+async function autoDeleteAll() {
+    if (window._autoDeleteRunning) {
+        showSearchFeedback('⛔ 実行中です (Esc で停止)', 'warning');
+        return;
+    }
+    window._autoDeleteRunning = true;
+    window._autoDeleteStop   = false;
+
+    const bar = document.getElementById('auto-delete-bar');
+    const setBar = (i, total, color) => {
+        if (!bar) return;
+        bar.style.display = 'block';
+        bar.style.background = color || '#f39c12';
+        bar.style.width = total > 0 ? (i / total * 100).toFixed(1) + '%' : '0%';
+    };
+
+    let lines = [];
+    let phase1 = 0;
+    let phase1Errors = 0;
+
+    // ── フェーズ1: 完全一致 ─────────────────────────────────────────────
+    try {
+        showSearchFeedback('🔍 フェーズ1 開始: 完全一致検索...', 'info');
+        const sheetRes  = await fetch('/api/sheet');
+        const sheetData = await sheetRes.json();
+        lines = [...(sheetData.lines || [])];
+        const total = lines.length;
+
+        for (let i = 0; i < total; i++) {
+            if (window._autoDeleteStop) break;
+            setBar(i, total, '#f39c12');
+
+            const raw     = lines[i];
+            const trimmed = raw.trim();
+
+            if (raw.startsWith(DELETED_PREFIX) || raw.startsWith(NGRAM_PREFIX)) continue;
+            if (trimmed.length < 4) continue;
+            if (!/^[\x00-\x7F]+$/.test(trimmed)) continue;
+
+            try {
+                _highlightSheetLine(i);
+                showSearchFeedback(`[${i+1}/${total}] 検索: ${trimmed.substring(0, 40)}`, 'info');
+
+                const res     = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}`);
+                const matches = await res.json();
+                if (!matches || matches.length === 0) { _clearSheetHighlight(); continue; }
+
+                const { offset, length } = matches[0];
+                const si = document.getElementById('search-input');
+                if (si) si.value = trimmed;
+
+                highlightRange(offset, length);
+                await goToAddress(offset);
+                await waitForBinaryLoad();
+                await sleep(AUTO_DELAY_VIEW);
+                if (window._autoDeleteStop) break;
+
+                const sheetInfo1 = { lineIndex: i, beforeText: raw, afterText: DELETED_PREFIX + raw };
+                const ok = await writeBinary(
+                    offset,
+                    new Array(length).fill(0x20),
+                    `AUTO-DEL L${i+1} 0x${offset.toString(16).toUpperCase()} ${length}B`,
+                    sheetInfo1
+                );
+
+                if (ok) {
+                    phase1++;
+                    const newText = DELETED_PREFIX + raw;
+                    lines[i] = newText;
+                    await _patchSheetLine(i, DELETED_PREFIX);
+                    _markSheetLineDone(i, newText);
+                    addHistoryEntry('DEL', offset, length, i + 1);
+                    updateSaveBtn();
+                    await sleep(AUTO_DELAY_NEXT);
+                }
+            } catch (lineErr) {
+                phase1Errors++;
+                console.error(`Line ${i+1} error:`, lineErr);
+                _clearSheetHighlight();
+            }
+        }
+        setBar(lines.length, lines.length, '#f39c12');
+
+    } catch (e) {
+        console.error('autoDeleteAll phase1 fatal:', e);
+        showSearchFeedback('❌ 致命的エラー: ' + e.message, 'error');
+    }
+
+    // ── try の外なので Esc 以外は必ずここへ到達 ─────────────────────────
+    if (window._autoDeleteStop) {
+        alert(`⏹ 停止しました\n\nフェーズ1（完全一致）: ${phase1} 件削除`);
+        window._autoDeleteRunning = false;
+        _clearSheetHighlight();
+        if (bar) bar.style.display = 'none';
+        return;
+    }
+
+    const errMsg  = phase1Errors > 0 ? `\n⚠ 処理エラー行: ${phase1Errors} 件（F12コンソール確認）` : '';
+    const doNgram = confirm(
+        `フェーズ1 完了 ── ${phase1} 件を 0x20 で削除しました。${errMsg}\n\n` +
+        `引き続き N-gram 検索で先頭から試行しますか？`
+    );
+
+    if (!doNgram) {
+        alert(`✅ 完了\n\nフェーズ1（完全一致）: ${phase1} 件\nN-gram: スキップ`);
+        window._autoDeleteRunning = false;
+        _clearSheetHighlight();
+        if (bar) bar.style.display = 'none';
+        return;
+    }
+
+    // ── フェーズ2: N-gram ────────────────────────────────────────────────
+    window._autoDeleteStop = false;
+    showSearchFeedback('🔍 フェーズ2 開始: N-gram 検索...', 'info');
+    let phase2 = 0;
+    let phase2Errors = 0;
+    const total2 = lines.length;
+
+    for (let i = 0; i < total2; i++) {
+        if (window._autoDeleteStop) break;
+        setBar(i, total2, '#e74c3c');
+
+        const raw     = lines[i];
+        const trimmed = raw.trim();
+
+        if (raw.startsWith(DELETED_PREFIX) || raw.startsWith(NGRAM_PREFIX)) continue;
+        if (trimmed.length < 4) continue;
+
+        try {
+            _highlightSheetLine(i);
+            showSearchFeedback(`[N-gram ${i+1}/${total2}]: ${trimmed.substring(0, 40)}`, 'info');
+
+            const res  = await fetch(`/api/map-line?text=${encodeURIComponent(trimmed)}`);
+            const data = await res.json();
+            if (!data || data.start_offset < 0 || !data.total_length) {
+                _clearSheetHighlight(); continue;
+            }
+
+            const offset = data.start_offset;
+            const length = data.total_length;
+            const si = document.getElementById('search-input');
+            if (si) si.value = data.binary_text || trimmed;
+
+            highlightRange(offset, length);
+            await goToAddress(offset);
+            await waitForBinaryLoad();
+            await sleep(AUTO_DELAY_VIEW);
+            if (window._autoDeleteStop) break;
+
+            const sheetInfo2 = { lineIndex: i, beforeText: raw, afterText: NGRAM_PREFIX + raw };
+            const ok = await writeBinary(
+                offset,
+                new Array(length).fill(0x20),
+                `N-gram-DEL L${i+1} 0x${offset.toString(16).toUpperCase()} ${length}B`,
+                sheetInfo2
+            );
+
+            if (ok) {
+                phase2++;
+                const newText = NGRAM_PREFIX + raw;
+                lines[i] = newText;
+                await _patchSheetLine(i, NGRAM_PREFIX);
+                _markSheetLineDone(i, newText);
+                addHistoryEntry('DEL', offset, length, i + 1);
+                updateSaveBtn();
+                await sleep(AUTO_DELAY_NEXT);
+            }
+        } catch (lineErr) {
+            phase2Errors++;
+            console.error(`[N-gram] Line ${i+1} error:`, lineErr);
+            _clearSheetHighlight();
+        }
+    }
+
+    const skipped  = lines.filter(l =>
+        !l.startsWith(DELETED_PREFIX) && !l.startsWith(NGRAM_PREFIX) && l.trim().length >= 4 && /^[\x00-\x7F]+$/.test(l.trim())
+    ).length;
+    const err2Msg  = phase2Errors > 0 ? `\n⚠ エラー行: ${phase2Errors} 件` : '';
+
+    alert(
+        `✅ 自動削除 全完了\n\n` +
+        `フェーズ1（完全一致） : ${phase1} 件\n` +
+        `フェーズ2（N-gram）   : ${phase2} 件\n` +
+        `━━━━━━━━━━━━━━\n` +
+        `合計削除              : ${phase1 + phase2} 件\n` +
+        `未処理              : ${skipped} 行${err2Msg}`
+    );
+
+    window._autoDeleteRunning = false;
+    _clearSheetHighlight();
+    if (bar) { bar.style.display = 'none'; }
+}
+
+// ↑↑↑ ここまで挿入 ↑↑↑
+
+
         function updateEditButtonState() {
             const editBtn = document.getElementById('edit-button');
             const searchInput = document.getElementById('search-input');
@@ -985,7 +1275,7 @@
             }
         }
 
-        async function writeBinary(offset, bytes, description = '') {
+        async function writeBinary(offset, bytes, description = '', sheetInfo = null) {
             try {
                 const res = await fetch('/api/write', {
                     method: 'POST',
@@ -994,12 +1284,12 @@
                 });
                 const data = await res.json();
                 if (!data.ok) { showSearchFeedback(`書き込みエラー: ${data.error}`, 'error'); return false; }
-                undoStack.push({ offset, original: data.original, description });
+                undoStack.push({ offset, original: data.original, description, sheetInfo });
                 redoStack = [];
                 clearUndoneHistoryEntries();
+                updateSaveBtn();
                 await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
                 if (currentHighlight) updateVisibleHighlights();
-                updateSaveBtn();
                 return true;
             } catch (err) {
                 console.error('Write failed:', err);
@@ -1058,11 +1348,12 @@
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    redoStack.push({ offset: last.offset, newBytes: data.original, original: last.original, description: last.description });
+                    redoStack.push({ offset: last.offset, newBytes: data.original, original: last.original, description: last.description, sheetInfo: last.sheetInfo });
                     await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
                     if (currentHighlight) updateVisibleHighlights();
                     strikethroughLastEntry();
                     showSearchFeedback(`Undo: ${last.description}`);
+                    if (last.sheetInfo) await _restoreSheetLine(last.sheetInfo.lineIndex, last.sheetInfo.beforeText);
                     updateSaveBtn();
                 }
             } catch (err) {
@@ -1082,11 +1373,12 @@
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    undoStack.push({ offset: last.offset, original: data.original, description: last.description });
+                    undoStack.push({ offset: last.offset, original: data.original, description: last.description, sheetInfo: last.sheetInfo });
                     await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
                     if (currentHighlight) updateVisibleHighlights();
                     unstrikethroughLastEntry();
                     showSearchFeedback(`Redo: ${last.description}`);
+                    if (last.sheetInfo) await _restoreSheetLine(last.sheetInfo.lineIndex, last.sheetInfo.afterText);
                     updateSaveBtn();
                 }
             } catch (err) {
@@ -1208,13 +1500,28 @@
                 searchInput.addEventListener('input', updateEditButtonState);
             }
 
+
             const editBtn = document.getElementById('edit-button');
             if (editBtn) editBtn.addEventListener('click', writeFromSearchBox);
 
             document.addEventListener('keydown', e => {
                 const inSearch = document.activeElement?.id === 'search-input';
+
+                // Esc で実行中の自動削除を停止
+                if (e.key === 'Escape' && window._autoDeleteRunning) {
+                    window._autoDeleteStop = true;
+                    showSearchFeedback('⏹ 自動削除を停止します...', 'warning');
+                    return;
+                }
+
                 if (e.key === 'Delete' && !inSearch) {
-                    e.preventDefault(); deleteSelection(); return;
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        autoDeleteAll();   // Shift+Del → 全行一括自動削除
+                    } else {
+                        deleteSelection(); // Del → 従来の単体削除
+                    }
+                    return;
                 }
                 if (!inSearch && ((e.key.toLowerCase() === 'z' && e.ctrlKey && e.shiftKey) ||
                     (e.key.toLowerCase() === 'y' && e.ctrlKey))) {
@@ -1292,7 +1599,7 @@
         async function goToAddress(addr) {
             if (addr >= loadedStartOffset && addr < loadedEndOffset) {
                 scrollToAddressInView(addr);
-                if (loadedEndOffset - addr < 512) loadBinaryDump(loadedEndOffset, PART_SIZE, true);
+                if (loadedEndOffset - addr < 512 && !isLoading) loadBinaryDump(loadedEndOffset, PART_SIZE, true);
                 return;
             }
             lastTargetAddress = addr;
@@ -1420,6 +1727,7 @@
 
                 if (!data.lines) return 0;
                 container.innerHTML = '';
+                container.classList.remove('loading');
 
                 data.lines.forEach((line, idx) => {
                     const div = document.createElement('div');
