@@ -327,6 +327,7 @@
         .search-btn.disabled svg {
             opacity: 0.5;
         }
+
         .search-btn svg {
             width: 20px;
             height: 20px;
@@ -589,15 +590,22 @@
 
         /* ── Auto Delete Progress Bar ── */
         #auto-delete-bar {
-            position: fixed; top: 0; left: 0; right: 0;
-            height: 3px; background: #f39c12;
-            z-index: 10000; display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #f39c12;
+            z-index: 10000;
+            display: none;
             transition: width 0.25s ease;
         }
+
         .sheet-line.auto-processing {
             outline: 2px solid #f39c12 !important;
             background: #2a2a1a !important;
         }
+
         .sheet-line.auto-done {
             opacity: 0.4;
         }
@@ -843,16 +851,48 @@
         function onDumpScroll() {
             const container = document.getElementById('panel-top');
             const { scrollTop, scrollHeight, clientHeight } = container;
+
+            // ミニマップ同期: 表示中央のアドレスからブロックを計算
+            if (CHUNK_SIZE > 0 && totalBinarySize > 0) {
+                const scrollRatio = scrollHeight > clientHeight ? scrollTop / (scrollHeight - clientHeight) : 0;
+                const centerAddr = loadedStartOffset + Math.floor((loadedEndOffset - loadedStartOffset) * scrollRatio);
+                const blockIdx = Math.floor(centerAddr / CHUNK_SIZE);
+                if (blockIdx !== currentBlockIndex && blockIdx >= 0 && blockIdx < densityData.length) {
+                    currentBlockIndex = blockIdx;
+                    scrollToBlock(blockIdx);
+                    updateOffsetDisplay(loadedStartOffset);
+                }
+            }
+
+            // 下端検知: 下に追加読み込み
             if (scrollHeight - (scrollTop + clientHeight) < 100) {
                 if (!isLoading && loadedEndOffset < totalBinarySize) {
-                    loadBinaryDump(loadedEndOffset, PART_SIZE, true);
+                    loadBinaryDump(loadedEndOffset, PART_SIZE, 'append');
+                }
+            }
+            // 上端検知: 上に追加読み込み
+            if (scrollTop < 100) {
+                if (!isLoading && loadedStartOffset > 0) {
+                    const prependSize = Math.min(PART_SIZE, loadedStartOffset);
+                    const prependOffset = loadedStartOffset - prependSize;
+                    loadBinaryDump(prependOffset, prependSize, 'prepend');
                 }
             }
         }
 
         async function loadCurrentBlockFull() {
-            if (isPartialLoaded && !isLoading && (loadedEndOffset - loadedStartOffset) < CHUNK_SIZE) {
-                loadBinaryDump(loadedEndOffset, CHUNK_SIZE - (loadedEndOffset - loadedStartOffset), true);
+            if (isLoading) return;
+            const HOVER_LOAD = 4096; // 4KB
+            // 下方向に4KB追加
+            if (loadedEndOffset < totalBinarySize) {
+                const downSize = Math.min(HOVER_LOAD, totalBinarySize - loadedEndOffset);
+                if (downSize > 0) await loadBinaryDump(loadedEndOffset, downSize, 'append');
+            }
+            // 上方向に4KB追加
+            if (loadedStartOffset > 0) {
+                const upSize = Math.min(HOVER_LOAD, loadedStartOffset);
+                const upOffset = loadedStartOffset - upSize;
+                if (upSize > 0) await loadBinaryDump(upOffset, upSize, 'prepend');
             }
         }
 
@@ -879,7 +919,7 @@
             const searchBtn = document.getElementById('search-button');
             if (!searchInput || !searchBtn) return;
             const searchText = searchInput.value.trimStart();
-            
+
             if (searchBtn.classList.contains('disabled')) {
                 if (searchText.includes('　')) {
                     showSearchFeedback("エラー: 全角スペースが含まれています。", "error");
@@ -944,45 +984,45 @@
         }
         window.executeSearch = executeSearch;
 
-// ↓↓↓ ここから挿入 ↓↓↓
+        // ↓↓↓ ここから挿入 ↓↓↓
 
-// ═══════════════════════════════════════════════════════════════════
-//  Auto Delete All  (Shift+Del)
-// ═══════════════════════════════════════════════════════════════════
-const DELETED_PREFIX  = '【削除済み】';
-const NGRAM_PREFIX    = '【N-削除済み】';
-const AUTO_DELAY_VIEW = 0;	// 700;
-const AUTO_DELAY_NEXT = 0;//	350;
+        // ═══════════════════════════════════════════════════════════════════
+        //  Auto Delete All  (Shift+Del)
+        // ═══════════════════════════════════════════════════════════════════
+        const DELETED_PREFIX = '【削除済み】';
+        const NGRAM_PREFIX = '【N-削除済み】';
+        const AUTO_DELAY_VIEW = 0;  //  700;
+        const AUTO_DELAY_NEXT = 0;  //  350;
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function waitForBinaryLoad(timeout = 4000) {
-    const t0 = Date.now();
-    while (isLoading && Date.now() - t0 < timeout) await sleep(80);
-}
+        async function waitForBinaryLoad(timeout = 4000) {
+            const t0 = Date.now();
+            while (isLoading && Date.now() - t0 < timeout) await sleep(80);
+        }
 
-function _highlightSheetLine(index) {
-    const els = document.querySelectorAll('#sheet-content .sheet-line');
-    els.forEach(l => l.classList.remove('auto-processing'));
-    if (els[index]) {
-        els[index].classList.add('auto-processing');
-        els[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-}
+        function _highlightSheetLine(index) {
+            const els = document.querySelectorAll('#sheet-content .sheet-line');
+            els.forEach(l => l.classList.remove('auto-processing'));
+            if (els[index]) {
+                els[index].classList.add('auto-processing');
+                els[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
 
-function _clearSheetHighlight() {
-    document.querySelectorAll('#sheet-content .sheet-line.auto-processing')
-        .forEach(l => l.classList.remove('auto-processing'));
-}
+        function _clearSheetHighlight() {
+            document.querySelectorAll('#sheet-content .sheet-line.auto-processing')
+                .forEach(l => l.classList.remove('auto-processing'));
+        }
 
-function _markSheetLineDone(index, newText) {
-    const els = document.querySelectorAll('#sheet-content .sheet-line');
-    if (!els[index]) return;
-    const textEl = els[index].querySelector('.line-text');
-    if (textEl) textEl.textContent = newText;
-    els[index].classList.remove('auto-processing');
-    els[index].classList.add('auto-done');
-}
+        function _markSheetLineDone(index, newText) {
+            const els = document.querySelectorAll('#sheet-content .sheet-line');
+            if (!els[index]) return;
+            const textEl = els[index].querySelector('.line-text');
+            if (textEl) textEl.textContent = newText;
+            els[index].classList.remove('auto-processing');
+            els[index].classList.add('auto-done');
+        }
 
         // シート行の表示をテキストに合わせて更新（Undo/Redo用）
         function _setSheetLineVisual(index, text) {
@@ -1006,214 +1046,214 @@ function _markSheetLineDone(index, newText) {
             } catch (e) { console.error('_restoreSheetLine failed', e); }
         }
 
-async function _patchSheetLine(lineIndex, prefix) {
-    try {
-        const res = await fetch('/api/sheet-line', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lineIndex, prefix })
-        });
-        return await res.json();
-    } catch (e) {
-        console.error('patchSheetLine failed', e);
-        return { ok: false };
-    }
-}
-
-async function autoDeleteAll() {
-    if (window._autoDeleteRunning) {
-        showSearchFeedback('⛔ 実行中です (Esc で停止)', 'warning');
-        return;
-    }
-    window._autoDeleteRunning = true;
-    window._autoDeleteStop   = false;
-
-    const bar = document.getElementById('auto-delete-bar');
-    const setBar = (i, total, color) => {
-        if (!bar) return;
-        bar.style.display = 'block';
-        bar.style.background = color || '#f39c12';
-        bar.style.width = total > 0 ? (i / total * 100).toFixed(1) + '%' : '0%';
-    };
-
-    let lines = [];
-    let phase1 = 0;
-    let phase1Errors = 0;
-
-    // ── フェーズ1: 完全一致 ─────────────────────────────────────────────
-    try {
-        showSearchFeedback('🔍 フェーズ1 開始: 完全一致検索...', 'info');
-        const sheetRes  = await fetch('/api/sheet');
-        const sheetData = await sheetRes.json();
-        lines = [...(sheetData.lines || [])];
-        const total = lines.length;
-
-        for (let i = 0; i < total; i++) {
-            if (window._autoDeleteStop) break;
-            setBar(i, total, '#f39c12');
-
-            const raw     = lines[i];
-            const trimmed = raw.trim();
-
-            if (raw.startsWith(DELETED_PREFIX) || raw.startsWith(NGRAM_PREFIX)) continue;
-            if (trimmed.length < 4) continue;
-            if (!/^[\x00-\x7F]+$/.test(trimmed)) continue;
-
+        async function _patchSheetLine(lineIndex, prefix) {
             try {
-                _highlightSheetLine(i);
-                showSearchFeedback(`[${i+1}/${total}] 検索: ${trimmed.substring(0, 40)}`, 'info');
-
-                const res     = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}`);
-                const matches = await res.json();
-                if (!matches || matches.length === 0) { _clearSheetHighlight(); continue; }
-
-                const { offset, length } = matches[0];
-                const si = document.getElementById('search-input');
-                if (si) si.value = trimmed;
-
-                highlightRange(offset, length);
-                await goToAddress(offset);
-                await waitForBinaryLoad();
-                await sleep(AUTO_DELAY_VIEW);
-                if (window._autoDeleteStop) break;
-
-                const sheetInfo1 = { lineIndex: i, beforeText: raw, afterText: DELETED_PREFIX + raw };
-                const ok = await writeBinary(
-                    offset,
-                    new Array(length).fill(0x20),
-                    `AUTO-DEL L${i+1} 0x${offset.toString(16).toUpperCase()} ${length}B`,
-                    sheetInfo1
-                );
-
-                if (ok) {
-                    phase1++;
-                    const newText = DELETED_PREFIX + raw;
-                    lines[i] = newText;
-                    await _patchSheetLine(i, DELETED_PREFIX);
-                    _markSheetLineDone(i, newText);
-                    addHistoryEntry('DEL', offset, length, i + 1);
-                    updateSaveBtn();
-                    await sleep(AUTO_DELAY_NEXT);
-                }
-            } catch (lineErr) {
-                phase1Errors++;
-                console.error(`Line ${i+1} error:`, lineErr);
-                _clearSheetHighlight();
+                const res = await fetch('/api/sheet-line', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lineIndex, prefix })
+                });
+                return await res.json();
+            } catch (e) {
+                console.error('patchSheetLine failed', e);
+                return { ok: false };
             }
         }
-        setBar(lines.length, lines.length, '#f39c12');
 
-    } catch (e) {
-        console.error('autoDeleteAll phase1 fatal:', e);
-        showSearchFeedback('❌ 致命的エラー: ' + e.message, 'error');
-    }
+        async function autoDeleteAll() {
+            if (window._autoDeleteRunning) {
+                showSearchFeedback('⛔ 実行中です (Esc で停止)', 'warning');
+                return;
+            }
+            window._autoDeleteRunning = true;
+            window._autoDeleteStop = false;
 
-    // ── try の外なので Esc 以外は必ずここへ到達 ─────────────────────────
-    if (window._autoDeleteStop) {
-        alert(`⏹ 停止しました\n\nフェーズ1（完全一致）: ${phase1} 件削除`);
-        window._autoDeleteRunning = false;
-        _clearSheetHighlight();
-        if (bar) bar.style.display = 'none';
-        return;
-    }
+            const bar = document.getElementById('auto-delete-bar');
+            const setBar = (i, total, color) => {
+                if (!bar) return;
+                bar.style.display = 'block';
+                bar.style.background = color || '#f39c12';
+                bar.style.width = total > 0 ? (i / total * 100).toFixed(1) + '%' : '0%';
+            };
 
-    const errMsg  = phase1Errors > 0 ? `\n⚠ 処理エラー行: ${phase1Errors} 件（F12コンソール確認）` : '';
-    const doNgram = confirm(
-        `フェーズ1 完了 ── ${phase1} 件を 0x20 で削除しました。${errMsg}\n\n` +
-        `引き続き N-gram 検索で先頭から試行しますか？`
-    );
+            let lines = [];
+            let phase1 = 0;
+            let phase1Errors = 0;
 
-    if (!doNgram) {
-        alert(`✅ 完了\n\nフェーズ1（完全一致）: ${phase1} 件\nN-gram: スキップ`);
-        window._autoDeleteRunning = false;
-        _clearSheetHighlight();
-        if (bar) bar.style.display = 'none';
-        return;
-    }
+            // ── フェーズ1: 完全一致 ─────────────────────────────────────────────
+            try {
+                showSearchFeedback('🔍 フェーズ1 開始: 完全一致検索...', 'info');
+                const sheetRes = await fetch('/api/sheet');
+                const sheetData = await sheetRes.json();
+                lines = [...(sheetData.lines || [])];
+                const total = lines.length;
 
-    // ── フェーズ2: N-gram ────────────────────────────────────────────────
-    window._autoDeleteStop = false;
-    showSearchFeedback('🔍 フェーズ2 開始: N-gram 検索...', 'info');
-    let phase2 = 0;
-    let phase2Errors = 0;
-    const total2 = lines.length;
+                for (let i = 0; i < total; i++) {
+                    if (window._autoDeleteStop) break;
+                    setBar(i, total, '#f39c12');
 
-    for (let i = 0; i < total2; i++) {
-        if (window._autoDeleteStop) break;
-        setBar(i, total2, '#e74c3c');
+                    const raw = lines[i];
+                    const trimmed = raw.trim();
 
-        const raw     = lines[i];
-        const trimmed = raw.trim();
+                    if (raw.startsWith(DELETED_PREFIX) || raw.startsWith(NGRAM_PREFIX)) continue;
+                    if (trimmed.length < 4) continue;
+                    if (!/^[\x00-\x7F]+$/.test(trimmed)) continue;
 
-        if (raw.startsWith(DELETED_PREFIX) || raw.startsWith(NGRAM_PREFIX)) continue;
-        if (trimmed.length < 4) continue;
+                    try {
+                        _highlightSheetLine(i);
+                        showSearchFeedback(`[${i + 1}/${total}] 検索: ${trimmed.substring(0, 40)}`, 'info');
 
-        try {
-            _highlightSheetLine(i);
-            showSearchFeedback(`[N-gram ${i+1}/${total2}]: ${trimmed.substring(0, 40)}`, 'info');
+                        const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}`);
+                        const matches = await res.json();
+                        if (!matches || matches.length === 0) { _clearSheetHighlight(); continue; }
 
-            const res  = await fetch(`/api/map-line?text=${encodeURIComponent(trimmed)}`);
-            const data = await res.json();
-            if (!data || data.start_offset < 0 || !data.total_length) {
-                _clearSheetHighlight(); continue;
+                        const { offset, length } = matches[0];
+                        const si = document.getElementById('search-input');
+                        if (si) si.value = trimmed;
+
+                        highlightRange(offset, length);
+                        await goToAddress(offset);
+                        await waitForBinaryLoad();
+                        await sleep(AUTO_DELAY_VIEW);
+                        if (window._autoDeleteStop) break;
+
+                        const sheetInfo1 = { lineIndex: i, beforeText: raw, afterText: DELETED_PREFIX + raw };
+                        const ok = await writeBinary(
+                            offset,
+                            new Array(length).fill(0x20),
+                            `AUTO-DEL L${i + 1} 0x${offset.toString(16).toUpperCase()} ${length}B`,
+                            sheetInfo1
+                        );
+
+                        if (ok) {
+                            phase1++;
+                            const newText = DELETED_PREFIX + raw;
+                            lines[i] = newText;
+                            await _patchSheetLine(i, DELETED_PREFIX);
+                            _markSheetLineDone(i, newText);
+                            addHistoryEntry('DEL', offset, length, i + 1);
+                            updateSaveBtn();
+                            await sleep(AUTO_DELAY_NEXT);
+                        }
+                    } catch (lineErr) {
+                        phase1Errors++;
+                        console.error(`Line ${i + 1} error:`, lineErr);
+                        _clearSheetHighlight();
+                    }
+                }
+                setBar(lines.length, lines.length, '#f39c12');
+
+            } catch (e) {
+                console.error('autoDeleteAll phase1 fatal:', e);
+                showSearchFeedback('❌ 致命的エラー: ' + e.message, 'error');
             }
 
-            const offset = data.start_offset;
-            const length = data.total_length;
-            const si = document.getElementById('search-input');
-            if (si) si.value = data.binary_text || trimmed;
+            // ── try の外なので Esc 以外は必ずここへ到達 ─────────────────────────
+            if (window._autoDeleteStop) {
+                alert(`⏹ 停止しました\n\nフェーズ1（完全一致）: ${phase1} 件削除`);
+                window._autoDeleteRunning = false;
+                _clearSheetHighlight();
+                if (bar) bar.style.display = 'none';
+                return;
+            }
 
-            highlightRange(offset, length);
-            await goToAddress(offset);
-            await waitForBinaryLoad();
-            await sleep(AUTO_DELAY_VIEW);
-            if (window._autoDeleteStop) break;
-
-            const sheetInfo2 = { lineIndex: i, beforeText: raw, afterText: NGRAM_PREFIX + raw };
-            const ok = await writeBinary(
-                offset,
-                new Array(length).fill(0x20),
-                `N-gram-DEL L${i+1} 0x${offset.toString(16).toUpperCase()} ${length}B`,
-                sheetInfo2
+            const errMsg = phase1Errors > 0 ? `\n⚠ 処理エラー行: ${phase1Errors} 件（F12コンソール確認）` : '';
+            const doNgram = confirm(
+                `フェーズ1 完了 ── ${phase1} 件を 0x20 で削除しました。${errMsg}\n\n` +
+                `引き続き N-gram 検索で先頭から試行しますか？`
             );
 
-            if (ok) {
-                phase2++;
-                const newText = NGRAM_PREFIX + raw;
-                lines[i] = newText;
-                await _patchSheetLine(i, NGRAM_PREFIX);
-                _markSheetLineDone(i, newText);
-                addHistoryEntry('DEL', offset, length, i + 1);
-                updateSaveBtn();
-                await sleep(AUTO_DELAY_NEXT);
+            if (!doNgram) {
+                alert(`✅ 完了\n\nフェーズ1（完全一致）: ${phase1} 件\nN-gram: スキップ`);
+                window._autoDeleteRunning = false;
+                _clearSheetHighlight();
+                if (bar) bar.style.display = 'none';
+                return;
             }
-        } catch (lineErr) {
-            phase2Errors++;
-            console.error(`[N-gram] Line ${i+1} error:`, lineErr);
+
+            // ── フェーズ2: N-gram ────────────────────────────────────────────────
+            window._autoDeleteStop = false;
+            showSearchFeedback('🔍 フェーズ2 開始: N-gram 検索...', 'info');
+            let phase2 = 0;
+            let phase2Errors = 0;
+            const total2 = lines.length;
+
+            for (let i = 0; i < total2; i++) {
+                if (window._autoDeleteStop) break;
+                setBar(i, total2, '#e74c3c');
+
+                const raw = lines[i];
+                const trimmed = raw.trim();
+
+                if (raw.startsWith(DELETED_PREFIX) || raw.startsWith(NGRAM_PREFIX)) continue;
+                if (trimmed.length < 4) continue;
+
+                try {
+                    _highlightSheetLine(i);
+                    showSearchFeedback(`[N-gram ${i + 1}/${total2}]: ${trimmed.substring(0, 40)}`, 'info');
+
+                    const res = await fetch(`/api/map-line?text=${encodeURIComponent(trimmed)}`);
+                    const data = await res.json();
+                    if (!data || data.start_offset < 0 || !data.total_length) {
+                        _clearSheetHighlight(); continue;
+                    }
+
+                    const offset = data.start_offset;
+                    const length = data.total_length;
+                    const si = document.getElementById('search-input');
+                    if (si) si.value = data.binary_text || trimmed;
+
+                    highlightRange(offset, length);
+                    await goToAddress(offset);
+                    await waitForBinaryLoad();
+                    await sleep(AUTO_DELAY_VIEW);
+                    if (window._autoDeleteStop) break;
+
+                    const sheetInfo2 = { lineIndex: i, beforeText: raw, afterText: NGRAM_PREFIX + raw };
+                    const ok = await writeBinary(
+                        offset,
+                        new Array(length).fill(0x20),
+                        `N-gram-DEL L${i + 1} 0x${offset.toString(16).toUpperCase()} ${length}B`,
+                        sheetInfo2
+                    );
+
+                    if (ok) {
+                        phase2++;
+                        const newText = NGRAM_PREFIX + raw;
+                        lines[i] = newText;
+                        await _patchSheetLine(i, NGRAM_PREFIX);
+                        _markSheetLineDone(i, newText);
+                        addHistoryEntry('DEL', offset, length, i + 1);
+                        updateSaveBtn();
+                        await sleep(AUTO_DELAY_NEXT);
+                    }
+                } catch (lineErr) {
+                    phase2Errors++;
+                    console.error(`[N-gram] Line ${i + 1} error:`, lineErr);
+                    _clearSheetHighlight();
+                }
+            }
+
+            const skipped = lines.filter(l =>
+                !l.startsWith(DELETED_PREFIX) && !l.startsWith(NGRAM_PREFIX) && l.trim().length >= 4 && /^[\x00-\x7F]+$/.test(l.trim())
+            ).length;
+            const err2Msg = phase2Errors > 0 ? `\n⚠ エラー行: ${phase2Errors} 件` : '';
+
+            alert(
+                `✅ 自動削除 全完了\n\n` +
+                `フェーズ1（完全一致） : ${phase1} 件\n` +
+                `フェーズ2（N-gram）   : ${phase2} 件\n` +
+                `━━━━━━━━━━━━━━\n` +
+                `合計削除              : ${phase1 + phase2} 件\n` +
+                `未処理              : ${skipped} 行${err2Msg}`
+            );
+
+            window._autoDeleteRunning = false;
             _clearSheetHighlight();
+            if (bar) { bar.style.display = 'none'; }
         }
-    }
 
-    const skipped  = lines.filter(l =>
-        !l.startsWith(DELETED_PREFIX) && !l.startsWith(NGRAM_PREFIX) && l.trim().length >= 4 && /^[\x00-\x7F]+$/.test(l.trim())
-    ).length;
-    const err2Msg  = phase2Errors > 0 ? `\n⚠ エラー行: ${phase2Errors} 件` : '';
-
-    alert(
-        `✅ 自動削除 全完了\n\n` +
-        `フェーズ1（完全一致） : ${phase1} 件\n` +
-        `フェーズ2（N-gram）   : ${phase2} 件\n` +
-        `━━━━━━━━━━━━━━\n` +
-        `合計削除              : ${phase1 + phase2} 件\n` +
-        `未処理              : ${skipped} 行${err2Msg}`
-    );
-
-    window._autoDeleteRunning = false;
-    _clearSheetHighlight();
-    if (bar) { bar.style.display = 'none'; }
-}
-
-// ↑↑↑ ここまで挿入 ↑↑↑
+        // ↑↑↑ ここまで挿入 ↑↑↑
 
 
         function updateEditButtonState() {
@@ -1221,15 +1261,15 @@ async function autoDeleteAll() {
             const searchInput = document.getElementById('search-input');
             const searchBtn = document.getElementById('search-button');
             if (!editBtn || !searchInput || !searchBtn) return;
-            
+
             // value is NOT trimmed here because we want to detect trailing full-width spaces
             const searchText = searchInput.value;
             const inputLen = searchText.length;
             const highlightLen = currentHighlight ? currentHighlight.length : 0;
-            
+
             let hasError = false;
             let errorMsg = '';
-            
+
             if (searchText.includes('　')) {
                 hasError = true;
                 errorMsg = '全角スペースが使われています。';
@@ -1241,12 +1281,12 @@ async function autoDeleteAll() {
             if (hasError) {
                 editBtn.classList.add('disabled');
                 editBtn.title = errorMsg;
-                
+
                 searchBtn.classList.add('disabled');
                 searchBtn.title = errorMsg;
                 // disabled属性を外すことでマウスイベント（ツールチップ表示）を活かす
                 searchBtn.disabled = false;
-                
+
                 // リアルタイムエラー表示
                 showSearchFeedback("エラー: " + errorMsg, "error");
             } else {
@@ -1254,13 +1294,13 @@ async function autoDeleteAll() {
                 searchBtn.classList.remove('disabled');
                 searchBtn.title = '検索';
                 searchBtn.disabled = false;
-                
+
                 // エラー解消時に表示を消す（または元の状態に戻す処理）
                 const feedback = document.getElementById('search-feedback');
                 if (feedback && feedback.style.display === 'block' && feedback.classList.contains('error')) {
-                     feedback.style.display = 'none';
+                    feedback.style.display = 'none';
                 }
-                
+
                 if (highlightLen > 0 && inputLen === highlightLen) {
                     editBtn.style.background = '#f39c12';
                     editBtn.style.opacity = '1';
@@ -1288,7 +1328,7 @@ async function autoDeleteAll() {
                 redoStack = [];
                 clearUndoneHistoryEntries();
                 updateSaveBtn();
-                await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
+                await loadBinaryDump(loadedStartOffset, PART_SIZE);
                 if (currentHighlight) updateVisibleHighlights();
                 return true;
             } catch (err) {
@@ -1349,7 +1389,7 @@ async function autoDeleteAll() {
                 const data = await res.json();
                 if (data.ok) {
                     redoStack.push({ offset: last.offset, newBytes: data.original, original: last.original, description: last.description, sheetInfo: last.sheetInfo });
-                    await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
+                    await loadBinaryDump(loadedStartOffset, PART_SIZE);
                     if (currentHighlight) updateVisibleHighlights();
                     strikethroughLastEntry();
                     showSearchFeedback(`Undo: ${last.description}`);
@@ -1374,7 +1414,7 @@ async function autoDeleteAll() {
                 const data = await res.json();
                 if (data.ok) {
                     undoStack.push({ offset: last.offset, original: data.original, description: last.description, sheetInfo: last.sheetInfo });
-                    await loadBinaryDump(loadedStartOffset, PART_SIZE, false);
+                    await loadBinaryDump(loadedStartOffset, PART_SIZE);
                     if (currentHighlight) updateVisibleHighlights();
                     unstrikethroughLastEntry();
                     showSearchFeedback(`Redo: ${last.description}`);
@@ -1491,12 +1531,6 @@ async function autoDeleteAll() {
             }
 
             if (searchInput) {
-                searchInput.addEventListener('keydown', e => {
-                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                        e.preventDefault();
-                        executeSearch(e.shiftKey ? -1 : 1);
-                    }
-                });
                 searchInput.addEventListener('input', updateEditButtonState);
             }
 
@@ -1506,6 +1540,13 @@ async function autoDeleteAll() {
 
             document.addEventListener('keydown', e => {
                 const inSearch = document.activeElement?.id === 'search-input';
+
+                // Ctrl+Enter / Ctrl+Shift+Enter: 検索の次/前（どこにフォーカスがあっても動作）
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    executeSearch(e.shiftKey ? -1 : 1);
+                    return;
+                }
 
                 // Esc で実行中の自動削除を停止
                 if (e.key === 'Escape' && window._autoDeleteRunning) {
@@ -1599,7 +1640,7 @@ async function autoDeleteAll() {
         async function goToAddress(addr) {
             if (addr >= loadedStartOffset && addr < loadedEndOffset) {
                 scrollToAddressInView(addr);
-                if (loadedEndOffset - addr < 512 && !isLoading) loadBinaryDump(loadedEndOffset, PART_SIZE, true);
+                if (loadedEndOffset - addr < 512 && !isLoading) loadBinaryDump(loadedEndOffset, PART_SIZE, 'append');
                 return;
             }
             lastTargetAddress = addr;
@@ -1609,7 +1650,7 @@ async function autoDeleteAll() {
             // 修正: loadOffset は addr を PART_SIZE 境界に切り捨てたアドレス
             const loadOffset = Math.floor(addr / PART_SIZE) * PART_SIZE;
             const loadSize = PART_SIZE * 2;
-            await loadBinaryDump(loadOffset, loadSize, false);
+            await loadBinaryDump(loadOffset, loadSize);
             scrollToAddressInView(addr, loadedStartOffset);
         }
 
@@ -1623,7 +1664,7 @@ async function autoDeleteAll() {
             }
         }
 
-        async function loadBinaryDump(offset, size = CHUNK_SIZE, append = false) {
+        async function loadBinaryDump(offset, size = CHUNK_SIZE, mode = 'replace') {
             if (isLoading) return 0;
             isLoading = true;
             currentAbortController = new AbortController();
@@ -1632,6 +1673,7 @@ async function autoDeleteAll() {
                 const res = await fetch(`/api/dump/${offset}/${size}`, { signal: currentAbortController.signal });
                 const data = await res.json();
                 const container = document.getElementById('dump-binary');
+                const panelTop = document.getElementById('panel-top');
 
                 let colAddr = container.querySelector('.col-addr');
                 let colHex = container.querySelector('.col-hex');
@@ -1644,7 +1686,7 @@ async function autoDeleteAll() {
                     container.append(colAddr, colHex, colAscii);
                 }
 
-                if (!append) {
+                if (mode === 'replace') {
                     colAddr.innerHTML = colHex.innerHTML = colAscii.innerHTML = '';
                     container.classList.remove('loading');
                     loadedStartOffset = offset;
@@ -1652,12 +1694,19 @@ async function autoDeleteAll() {
                 }
                 if (data.matches) currentDictionaryMatches = currentDictionaryMatches.concat(data.matches);
 
+                // prepend用: 既存先頭要素の位置を記録
+                const usePrepend = (mode === 'prepend');
+                const refElement = usePrepend ? colAddr.firstChild : null;
+                const refTop = refElement ? refElement.getBoundingClientRect().top : 0;
+                const addrFrag = usePrepend ? document.createDocumentFragment() : null;
+                const hexFrag = usePrepend ? document.createDocumentFragment() : null;
+                const asciiFrag = usePrepend ? document.createDocumentFragment() : null;
+
                 data.lines.forEach(line => {
                     const lineAddr = parseInt(line.addr, 16);
 
                     // Address
                     const addrDiv = Object.assign(document.createElement('div'), { className: 'dump-cell', textContent: line.addr });
-                    colAddr.appendChild(addrDiv);
 
                     // Hex
                     const hexDiv = document.createElement('div');
@@ -1672,7 +1721,6 @@ async function autoDeleteAll() {
                         hexDiv.appendChild(sp);
                         if (i < 15) hexDiv.appendChild(document.createTextNode(' '));
                     });
-                    colHex.appendChild(hexDiv);
 
                     // ASCII
                     const asciiDiv = document.createElement('div');
@@ -1688,14 +1736,38 @@ async function autoDeleteAll() {
                         if (hexBytes[i] === '2E') sp.style.color = '#dcdcaa';
                         asciiDiv.appendChild(sp);
                     });
-                    colAscii.appendChild(asciiDiv);
+
+                    if (usePrepend) {
+                        addrFrag.appendChild(addrDiv);
+                        hexFrag.appendChild(hexDiv);
+                        asciiFrag.appendChild(asciiDiv);
+                    } else {
+                        colAddr.appendChild(addrDiv);
+                        colHex.appendChild(hexDiv);
+                        colAscii.appendChild(asciiDiv);
+                    }
                 });
 
+                // prepend: フラグメントを先頭に挿入 + スクロール位置補正
+                if (usePrepend) {
+                    colAddr.insertBefore(addrFrag, colAddr.firstChild);
+                    colHex.insertBefore(hexFrag, colHex.firstChild);
+                    colAscii.insertBefore(asciiFrag, colAscii.firstChild);
+                    loadedStartOffset = offset;
+                    // 参照要素の位置変化分だけスクロール補正（getBoundingClientRect方式）
+                    if (refElement) {
+                        const newTop = refElement.getBoundingClientRect().top;
+                        panelTop.scrollTop += (newTop - refTop);
+                    }
+                }
+
                 totalBinarySize = data.total_size;
-                loadedEndOffset = offset + data.lines.length * 16;
+                if (mode !== 'prepend') {
+                    loadedEndOffset = offset + data.lines.length * 16;
+                }
                 isPartialLoaded = (loadedEndOffset - loadedStartOffset) < CHUNK_SIZE;
                 updateOffsetDisplay(loadedStartOffset);
-                if (!append && lastTargetAddress !== null) scrollToAddressInView(lastTargetAddress);
+                if (mode === 'replace' && lastTargetAddress !== null) scrollToAddressInView(lastTargetAddress);
                 isLoading = false;
                 return data.total_size;
             } catch (err) {
@@ -1981,15 +2053,11 @@ async function autoDeleteAll() {
             const btn = document.getElementById('save-binary-btn');
             if (btn) { btn.disabled = true; btn.innerText = 'Saving...'; }
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000);
                 const res = await fetch('/api/save-binary', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ save_as_bin }),
-                    signal: controller.signal
                 });
-                clearTimeout(timeoutId);
                 const data = await res.json();
                 if (data.ok) {
                     savedStackLength = undoStack.length;
@@ -2015,8 +2083,7 @@ async function autoDeleteAll() {
                 }
             } catch (err) {
                 console.error(err);
-                if (err.name === 'AbortError') alert('保存タイムアウト');
-                else alert(`保存エラー: ${err.message}`);
+                alert(`保存エラー: ${err.message}`);
             } finally {
                 if (btn) { btn.innerText = 'Save'; updateSaveBtn(); }
             }

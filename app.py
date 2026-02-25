@@ -8,7 +8,8 @@ from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
 import os
 import time
-import shutil          # ← これも先頭でまとめてimportしておく
+import shutil
+import datetime
 import bin_core as core
 
 app = Flask(__name__)
@@ -48,8 +49,8 @@ def load_config():
                 lines = [l.strip() for l in f.readlines()]
                 if len(lines) > 0 and lines[0]: bin_path = lines[0]
                 if len(lines) > 1 and lines[1]: sheet_path = lines[1]
-        except:
-            pass
+        except OSError as e:
+            print(f"Warning: Could not read path.ini: {e}")
 
     if not bin_path or not os.path.exists(bin_path):
         base_dir = os.path.dirname(__file__)
@@ -60,6 +61,7 @@ def load_config():
                 break
 
     if not bin_path or not os.path.exists(bin_path):
+        root = None
         try:
             import tkinter as tk
             from tkinter import filedialog
@@ -68,9 +70,11 @@ def load_config():
                 title="Select Binary",
                 filetypes=[("Binary", "*.exe *.bin"), ("All", "*.*")]
             )
-            root.destroy()
-        except:
-            pass
+        except Exception as e:
+            print(f"Warning: Binary file dialog failed: {e}")
+        finally:
+            if root:
+                root.destroy()
 
     default_sheet = os.path.join(os.path.dirname(__file__), DEFAULT_SHEET_FILENAME)
     if not sheet_path or not os.path.exists(sheet_path):
@@ -79,8 +83,8 @@ def load_config():
             try:
                 with open(sheet_path, "w", encoding="utf-8") as f:
                     f.write("# System Prompts\n")
-            except:
-                pass
+            except OSError as e:
+                print(f"Warning: Could not create default sheet: {e}")
 
     if bin_path:
         with open(PATH_INI, "w", encoding="utf-8") as f:
@@ -90,7 +94,7 @@ def load_config():
     return bin_path, sheet_path
 
 
-BINARY_PATH, SHEET_PATH = load_config()
+BINARY_PATH, SHEET_PATH = None, None
 
 binary_data: bytearray = bytearray()
 sheet_lines: list[str] = []
@@ -161,7 +165,6 @@ def calculate_ascii_density(data: bytes) -> list[dict[str, int]]:
 def load_files():
     """ファイルを読み込み、密度を計算"""
     global binary_data, sheet_lines, ascii_density, bd, loaded_filename, BINARY_PATH, SHEET_PATH
-
     BINARY_PATH, SHEET_PATH = load_config()
     load_prompt_words()
 
@@ -267,7 +270,6 @@ def update_sheet():
         new_filename = ""
 
         if is_paste:
-            import datetime
             now = datetime.datetime.now().strftime("%m_%d_%H_%M")
             new_filename = f"import_{now}.md"
             new_path = os.path.join(os.path.dirname(__file__), new_filename)
@@ -358,17 +360,18 @@ def search():
 def map_line():
     """行テキストをバイナリ内のフラグメントにマッピング"""
     text = request.args.get("text", "")
+    text = text.lstrip()  # 先頭空白を除去して変数化（以降再利用）
     if not text or bd is None:
         return jsonify({"fragments": [], "fully_matched": False})
 
     # 完全一致を試行
-    full_hits = core.search(bd, text.lstrip(), max_results=2)
+    full_hits = core.search(bd, text, max_results=2)
     if full_hits:
         return jsonify({
             "fully_matched": True,
             "hit_count": len(full_hits),
             "fragments": [{
-                'text': text.lstrip(),
+                'text': text,
                 "offset": full_hits[0].offset,
                 "offset_hex": f"0x{full_hits[0].offset:08X}",
                 "length": full_hits[0].length,
@@ -379,7 +382,7 @@ def map_line():
         })
 
     # N-gram スライディングウィンドウで検索
-    ngram_results = core.map_line_ngram(bd, text.lstrip())
+    ngram_results = core.map_line_ngram(bd, text)
     if ngram_results:
         best = ngram_results[0]
         return jsonify({
@@ -441,7 +444,7 @@ def get_prompt_words():
     words = []
     if os.path.exists(PROMPT_WORDS_PATH):
         with open(PROMPT_WORDS_PATH, "r", encoding="utf-8") as f:
-            words = [line.rstrip('\n').rstrip('\r') for line in f.readlines()]
+            words = [line.rstrip('\r\n') for line in f.readlines()]
     return jsonify({"words": words})
 
 
@@ -488,7 +491,7 @@ def select_binary():
         root.destroy()
         if path and os.path.exists(path):
             with open(PATH_INI, "w", encoding="utf-8") as f:
-                f.write(path)
+                f.write(f"{path}\n{SHEET_PATH}")
             load_files()
             return jsonify({"ok": True, "filename": loaded_filename, "size": len(binary_data)})
         else:
@@ -518,7 +521,6 @@ def save_binary_file():
         backup_path = None
         if os.path.exists(target_path):
             backup_path = get_unique_backup_path(target_path)
-            import shutil
             shutil.copy2(target_path, backup_path)
             print(f"Backup created: {backup_path}")
 
