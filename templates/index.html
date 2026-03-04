@@ -1187,6 +1187,7 @@
 
                 if (raw.startsWith(DELETED_PREFIX) || raw.startsWith(NGRAM_PREFIX)) continue;
                 if (trimmed.length < 4) continue;
+                if (!/^[\x00-\x7F]+$/.test(trimmed)) continue;
 
                 try {
                     _highlightSheetLine(i);
