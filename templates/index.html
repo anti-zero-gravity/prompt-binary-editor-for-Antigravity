@@ -1111,10 +1111,6 @@
                         const si = document.getElementById('search-input');
                         if (si) si.value = trimmed;
 
-                        highlightRange(offset, length);
-                        await goToAddress(offset);
-                        await waitForBinaryLoad();
-                        await sleep(AUTO_DELAY_VIEW);
                         if (window._autoDeleteStop) break;
 
                         const sheetInfo1 = { lineIndex: i, beforeText: raw, afterText: DELETED_PREFIX + raw };
@@ -1204,10 +1200,6 @@
                     const si = document.getElementById('search-input');
                     if (si) si.value = data.binary_text || trimmed;
 
-                    highlightRange(offset, length);
-                    await goToAddress(offset);
-                    await waitForBinaryLoad();
-                    await sleep(AUTO_DELAY_VIEW);
                     if (window._autoDeleteStop) break;
 
                     const sheetInfo2 = { lineIndex: i, beforeText: raw, afterText: NGRAM_PREFIX + raw };
@@ -1329,8 +1321,26 @@
                 redoStack = [];
                 clearUndoneHistoryEntries();
                 updateSaveBtn();
-                await loadBinaryDump(loadedStartOffset, PART_SIZE);
-                if (currentHighlight) updateVisibleHighlights();
+                // ピンポイント表示: 編集箇所を中心とした小領域を即座にロード
+                const pinpointSize = Math.max(PART_SIZE, bytes.length + 256);
+                const pinpointStart = Math.max(0, offset - 128);
+                await loadBinaryDump(pinpointStart, pinpointSize);
+                highlightRange(offset, bytes.length, HIGHLIGHT_COLOR);
+                scrollToAddressInView(offset);
+                // バックグラウンドで8KBブロック全体を補完
+                const blockIdx = Math.floor(offset / CHUNK_SIZE);
+                const blockStart = blockIdx * CHUNK_SIZE;
+                setTimeout(async () => {
+                    if (loadedEndOffset < blockStart + CHUNK_SIZE) {
+                        const appendStart = loadedEndOffset;
+                        const appendSize = Math.min(CHUNK_SIZE, blockStart + CHUNK_SIZE - appendStart);
+                        if (appendSize > 0) await loadBinaryDump(appendStart, appendSize, 'append');
+                    }
+                    if (loadedStartOffset > blockStart) {
+                        const prependSize = loadedStartOffset - blockStart;
+                        if (prependSize > 0) await loadBinaryDump(blockStart, prependSize, 'prepend');
+                    }
+                }, 50);
                 return true;
             } catch (err) {
                 console.error('Write failed:', err);
@@ -1390,8 +1400,11 @@
                 const data = await res.json();
                 if (data.ok) {
                     redoStack.push({ offset: last.offset, newBytes: data.original, original: last.original, description: last.description, sheetInfo: last.sheetInfo });
-                    await loadBinaryDump(loadedStartOffset, PART_SIZE);
-                    if (currentHighlight) updateVisibleHighlights();
+                    // ピンポイント表示: Undoした箇所を即座に表示
+                    const pinStart = Math.max(0, last.offset - 128);
+                    await loadBinaryDump(pinStart, Math.max(PART_SIZE, last.original.length + 256));
+                    highlightRange(last.offset, last.original.length, HIGHLIGHT_COLOR);
+                    scrollToAddressInView(last.offset);
                     strikethroughLastEntry();
                     showSearchFeedback(`Undo: ${last.description}`);
                     if (last.sheetInfo) await _restoreSheetLine(last.sheetInfo.lineIndex, last.sheetInfo.beforeText);
@@ -1415,8 +1428,11 @@
                 const data = await res.json();
                 if (data.ok) {
                     undoStack.push({ offset: last.offset, original: data.original, description: last.description, sheetInfo: last.sheetInfo });
-                    await loadBinaryDump(loadedStartOffset, PART_SIZE);
-                    if (currentHighlight) updateVisibleHighlights();
+                    // ピンポイント表示: Redoした箇所を即座に表示
+                    const pinStart = Math.max(0, last.offset - 128);
+                    await loadBinaryDump(pinStart, Math.max(PART_SIZE, last.newBytes.length + 256));
+                    highlightRange(last.offset, last.newBytes.length, HIGHLIGHT_COLOR);
+                    scrollToAddressInView(last.offset);
                     unstrikethroughLastEntry();
                     showSearchFeedback(`Redo: ${last.description}`);
                     if (last.sheetInfo) await _restoreSheetLine(last.sheetInfo.lineIndex, last.sheetInfo.afterText);
@@ -1576,6 +1592,55 @@
 
             window.addEventListener('resize', drawMinimap);
             updateEditButtonState();
+            // --- ASCII/Hex選択 → currentHighlight 同期 ---
+            document.addEventListener('selectionchange', () => {
+                const sel = window.getSelection();
+                if (!sel || sel.isCollapsed) return;
+
+                // 選択範囲の先頭/末尾ノードを特定
+                const anchorEl = sel.anchorNode?.nodeType === 1 ? sel.anchorNode : sel.anchorNode?.parentElement;
+                const focusEl  = sel.focusNode?.nodeType === 1  ? sel.focusNode  : sel.focusNode?.parentElement;
+                if (!anchorEl || !focusEl) return;
+
+                // ASCII列 or Hex列 のspanか判定
+                const inAscii = anchorEl.closest('.col-ascii') && focusEl.closest('.col-ascii');
+                const inHex   = anchorEl.closest('.col-hex')   && focusEl.closest('.col-hex');
+                if (!inAscii && !inHex) return;
+
+                // data-addr 付きの全spanを走査して、選択範囲に含まれるものを列挙
+                const col = inAscii
+                    ? document.querySelector('#dump-binary .col-ascii')
+                    : document.querySelector('#dump-binary .col-hex');
+                if (!col) return;
+
+                const spans = col.querySelectorAll('span[data-addr]');
+                let minAddr = Infinity, maxAddr = -1;
+                for (const sp of spans) {
+                    if (sel.containsNode(sp, true)) {
+                        const a = parseInt(sp.dataset.addr, 10);
+                        if (a < minAddr) minAddr = a;
+                        if (a > maxAddr) maxAddr = a;
+                    }
+                }
+                if (minAddr === Infinity || maxAddr < 0) return;
+                const length = maxAddr - minAddr + 1;
+                if (length <= 0 || length > 100000) return;
+
+                // currentHighlight を更新
+                currentHighlight = { startAddr: minAddr, length, color: HIGHLIGHT_COLOR };
+                updateVisibleHighlights();
+                updateEditButtonState();
+
+                // ASCII列で選択した場合、選択テキストを検索ボックスへ反映
+                if (inAscii) {
+                    const selectedText = sel.toString().replace(/\n/g, '');
+                    const si = document.getElementById('search-input');
+                    if (si && selectedText.length > 0) {
+                        si.value = selectedText;
+                        updateEditButtonState();
+                    }
+                }
+            });
         }
 
         async function loadDensity() {
@@ -1716,6 +1781,7 @@
                         const sp = document.createElement('span');
                         sp.textContent = hex;
                         const charAddr = lineAddr + i;
+                        sp.dataset.addr = charAddr;
                         const hl = isHighlighted(charAddr);
                         if (hl) sp.style.background = hl;
                         else if (isDictionaryMatch(charAddr)) sp.style.background = 'rgba(165,255,0,0.07)';
@@ -1731,6 +1797,7 @@
                         const sp = document.createElement('span');
                         sp.textContent = char;
                         const charAddr = lineAddr + i;
+                        sp.dataset.addr = charAddr;
                         const hl = isHighlighted(charAddr);
                         if (hl) sp.style.background = hl;
                         else if (isDictionaryMatch(charAddr)) sp.style.background = 'rgba(165,255,0,0.07)';
