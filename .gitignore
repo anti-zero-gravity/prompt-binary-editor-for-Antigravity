@@ -42,3 +42,9 @@ Thumbs.db
 *.webp
 
 Secret Whispers.md
+
+# Local-only files (never push)
+import_03_04_13_35.md
+無題-94.txt
+import_*.md
+無題-*.txt
